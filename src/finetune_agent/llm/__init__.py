@@ -33,7 +33,9 @@ def get_llm_client(
     provider = provider.lower()
     
     if provider == "openai":
-        api_key = os.environ.get("OPENAI_API_KEY")
+        # Accept GROQ_API_KEY too so Groq's OpenAI-compatible endpoint works
+        # (OPENAI_API_KEY still takes precedence; existing OpenAI path unchanged).
+        api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
         if api_key:
             from .openai import OpenAIClient
             return OpenAIClient(api_key=api_key, **kwargs)

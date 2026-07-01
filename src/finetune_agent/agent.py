@@ -278,6 +278,26 @@ class FinetuneAgent:
         )
         
         # =====================================================================
+        # Honesty check: surface the resolved LLM provider/model BEFORE any
+        # generation so a silent fallback to mock can never go unnoticed.
+        # =====================================================================
+        provider = getattr(self.llm, "provider_name", "unknown")
+        model = (
+            getattr(self.llm, "model_name", None)
+            or getattr(self.llm, "_model", None)
+            or "n/a"
+        )
+        debug_info["llm_provider"] = provider
+        debug_info["llm_model"] = model
+        print(f"Generation provider: {provider} | model: {model}")
+        if provider == "mock":
+            print(
+                "WARNING: LLM provider resolved to 'mock' -- generated content is "
+                "canned/templated, NOT from a real model. Set LLM_PROVIDER=openai "
+                "(with OPENAI_API_KEY) or LLM_PROVIDER=ollama to use a real model."
+            )
+
+        # =====================================================================
         # Phase 1: Planning
         # =====================================================================
         self._report_progress("Phase 1: Generating action plan...")
@@ -382,7 +402,27 @@ class FinetuneAgent:
                 error_msg = f"CRITICAL: Dataset '{ds.type}' has 0 items after all processing"
                 debug_info["errors"].append(error_msg)
                 self._report_progress(f"ERROR: {error_msg}")
-        
+
+        # Honesty check: fail loudly if EVERYTHING was filtered out instead of
+        # silently writing an empty dataset and continuing.
+        total_final = sum(len(ds.items) for ds in filtered_dataset.datasets)
+        if total_final == 0:
+            total_generated = sum(debug_info["generated_count_before_critique"].values())
+            total_rejected = sum(debug_info["rejected_count"].values())
+            reason_parts = []
+            for dtype, reasons in debug_info["top_rejection_reasons"].items():
+                if reasons:
+                    reason_str = ", ".join(f"{k}={v}" for k, v in reasons.items())
+                    reason_parts.append(f"{dtype}: {reason_str}")
+            reasons_summary = "; ".join(reason_parts) or "no rejection reasons recorded"
+            raise GenerationError(
+                f"Final dataset is empty: 0 items after critique and "
+                f"{self.MAX_REFILL_ITERATIONS} refill attempt(s). "
+                f"Generated {total_generated} item(s), rejected {total_rejected}. "
+                f"Top rejection reasons -> {reasons_summary}. "
+                f"(provider={provider}, model={model})"
+            )
+
         # =====================================================================
         # Phase 6: Evaluation
         # =====================================================================

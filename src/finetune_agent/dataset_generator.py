@@ -5,6 +5,7 @@ V2: Now supports both template-based and LLM-backed generation.
 
 import hashlib
 import random
+import time
 from typing import Any, Callable
 
 from finetune_agent.schemas import (
@@ -433,7 +434,7 @@ Return JSON:
 Generate exactly {count} items. Make them production-quality."""
 
         try:
-            response = self.llm.generate_json(llm_prompt)
+            response = self._generate_json_with_retry(llm_prompt)
             items_data = response.get("items", [])
             
             qa_pairs = []
@@ -461,6 +462,52 @@ Generate exactly {count} items. Make them production-quality."""
             # Fall back to template generation for this batch
             return self._generate_template_batch(dataset_type, intent, count, constraints)
     
+    def _generate_json_with_retry(
+        self,
+        prompt: str,
+        max_retries: int = 3,
+        base_delay: float = 2.0,
+    ) -> dict:
+        """Call the LLM with retries + exponential backoff for transient errors.
+
+        Retries on rate limits (HTTP 429) and 5xx server errors, honoring a
+        Retry-After header when present. Re-raises the last error after the
+        retries are exhausted so the caller can fall back to templates.
+        """
+        last_error: Exception | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                return self.llm.generate_json(prompt)
+            except Exception as e:  # provider-agnostic: don't import httpx here
+                last_error = e
+                response = getattr(e, "response", None)
+                status = getattr(response, "status_code", None)
+                is_rate_limit = status == 429 or "429" in str(e)
+                is_retryable = is_rate_limit or (status is not None and status >= 500)
+
+                if attempt >= max_retries or not is_retryable:
+                    raise
+
+                delay = base_delay * (2 ** attempt)
+                # Honor Retry-After (seconds) if the provider sent one.
+                headers = getattr(response, "headers", None)
+                if headers is not None:
+                    retry_after = headers.get("retry-after")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except ValueError:
+                            pass
+
+                self._report_progress(
+                    f"LLM call {'rate-limited (429)' if is_rate_limit else f'failed ({status})'}; "
+                    f"retry {attempt + 1}/{max_retries} in {delay:.0f}s..."
+                )
+                time.sleep(delay)
+
+        # Defensive: loop always returns or raises, but satisfy type checkers.
+        raise last_error  # type: ignore[misc]
+
     def _generate_template_batch(
         self,
         dataset_type: str,
@@ -469,16 +516,6 @@ Generate exactly {count} items. Make them production-quality."""
         constraints: dict,
     ) -> list[QAPair]:
         """Fallback template-based batch generation."""
-        request = GenerationRequest(
-            prompt="",
-            dataset_types=[dataset_type],
-            qa_per_type=count,
-            constraints=type(
-                "Constraints",
-                (),
-                {"model_dump": lambda: constraints, **constraints},
-            )(),
-        )
         # Reuse template generator logic
         from finetune_agent.schemas import UserConstraints
         request = GenerationRequest(

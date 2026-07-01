@@ -33,9 +33,13 @@ class OpenAIClient(LLMClient):
             base_url: Custom base URL for API (or set OPENAI_BASE_URL env var)
             model: Model to use (or set OPENAI_MODEL env var)
         """
-        self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self._api_key = (
+            api_key
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("GROQ_API_KEY")  # allow Groq's OpenAI-compatible API
+        )
         if not self._api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
+            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY (or GROQ_API_KEY) environment variable.")
         
         self._base_url = (
             base_url 
