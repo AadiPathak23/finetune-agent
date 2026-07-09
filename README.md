@@ -36,9 +36,9 @@ action_plan.md  dataset.json   (filter/refill)  evaluation.json
 
 **Dataset Generator** -- Produces Q&A pairs using LLM inference (or template fallback). Generation is intent-driven: each dataset type is broken into distinct intents, and items are distributed across those intents to maximize diversity.
 
-**Critic** -- Reviews every generated item against dataset-specific contracts. For example, `testcase_generation` items must contain a fenced Python code block with a `def test_` function, at least two assertions, and a pytest feature. Items that fail are rejected, and the generator is invoked again to fill the gaps.
+**Critic** -- Reviews every generated item against dataset-specific contracts. For example, `testcase_generation` items must contain a fenced Python code block with a `def test_` function, at least two assertions, and a pytest feature. An optional execution gate goes further, statically analyzing and *running* self-contained tests to reject ones that fail (see [How it verifies itself](#how-it-verifies-itself)). Items that fail are rejected, and the generator is invoked again to fill the gaps.
 
-**Evaluator** -- Scores the final dataset on lexical diversity (TF-IDF, n-gram overlap), structural variety (question types, length distribution), and conceptual coverage (LLM-assisted semantic analysis). Produces an overall rating, health metrics, and actionable feedback.
+**Evaluator** -- Scores the final dataset on lexical diversity (TF-IDF, n-gram overlap), structural variety (question types, length distribution), conceptual coverage (LLM-assisted semantic analysis), and **correctness** (an LLM-judge rating faithfulness and usefulness). Produces an overall rating, health metrics, and actionable feedback.
 
 ---
 

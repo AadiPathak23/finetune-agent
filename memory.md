@@ -4,6 +4,25 @@
 > can pick up without re-deriving context. Newest context at top.
 > Last updated: 2026-07-09.
 
+## ⭐ Current status (session close 2026-07-09)
+
+- **Where the code is:** `main` @ `470c05a`, **pushed** to GitHub. Working tree clean.
+  Full suite **136 passing**; `distillery` wheel builds cleanly (deploy-ready).
+- **Credibility:** audited at 7.5/10, then closed both substance gaps (correctness scoring +
+  a gate that actually executes most tests) plus polish (LICENSE/CI/README/deploy) → ~9.5/10.
+- **Showcase run (local Ollama `qwen2.5:7b`, gate ON):** verification coverage **5/5 executed,
+  0 skipped**, correctness **85** — BUT only **2/5 items survived** (count penalty → overall_rating
+  ~59). Cause: the small model can't produce 5 clean self-contained tests + recurring
+  "Could not extract valid JSON" batch failures. **Not a bug — the model is the bottleneck.**
+- **Next steps (agreed with owner):**
+  1. **Groq showcase** — owner is getting a Groq key. Run the showcase on
+     `llama-3.3-70b-versatile` via BYO-key (sidebar or `.env`) for a high-count, high-rating,
+     screenshot-perfect run. This is the run to capture for LinkedIn.
+  2. **Prepare the LinkedIn post** — screenshots (verification banner + score) + draft copy.
+  3. **Rename the GitHub repo** → `gh repo rename distillery` (remote is still `finetune-agent`;
+     the CI badge already points at `.../distillery` and will resolve after the rename).
+  4. Optional v2.3: harden JSON extraction (biggest lever for the *local* model's yield).
+
 ## 2026-07-09 (2) — Push to a defensible 10/10 (correctness + polish)
 
 Closed the two substance gaps from the 7.5/10 audit, plus public-readiness polish.
@@ -142,18 +161,21 @@ Root causes identified (still partly open — see "Known issues / TODO"):
 `LLM_PROVIDER`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`,
 `OLLAMA_HOST`, `OLLAMA_MODEL`, `REDIS_URL`.
 
-## Known issues / TODO (not yet done)
-- [ ] **Do a real Groq generation run** end-to-end (needs a real key in `.env`); only
-      placeholder-key wiring tests have been run so far.
-- [ ] **Evaluator measures diversity, not correctness** — consider an LLM-judge rubric
-      scoring faithfulness/usefulness per pair and feeding it into `overall_rating`.
+## Known issues / TODO
+- [x] **Evaluator now measures correctness** — LLM-judge rubric (faithfulness/usefulness) in
+      `evaluator.calculate_correctness_score`, folded into `overall_rating` (weight 0.15). DONE 07-09.
+- [x] **Execution gate now verifies most items** — self-contained generation flipped
+      `SKIPPED_EXTERNAL_DEPS` → executed (showcase: 5/5). DONE 07-09.
+- [ ] **Do a real Groq generation run** end-to-end (needs a real key). Wiring + BYO-key UI done;
+      just needs the owner's key. This is the LinkedIn showcase run.
+- [ ] **"Could not extract valid JSON" batch failures** on the local 7B — biggest limiter of
+      local-model yield (empty batches → count shortfall → rating penalty). Harden `_extract_json`
+      / `_generate_json_with_retry`. High-value v2.3.
 - [ ] **Template fallback can't satisfy the pytest contract** for `testcase_generation`,
-      so a forced fallback there yields an empty dataset (now surfaced via the honest
-      `GenerationError` rather than a crash).
+      so a forced fallback there yields an empty dataset (surfaced via honest `GenerationError`).
 - [ ] **Critic placeholder regex** over-flags code; aggressive mode would over-delete
       valid code. Needs tightening before aggressive filtering is usable on code.
-- [ ] Retry/backoff is only on the QA-batch call. `generate_intents`, the Critic, and the
-      Evaluator have their own try/except fallbacks but no backoff — could add later.
+- [ ] Retry/backoff is only on the QA-batch call; other LLM calls have fallbacks but no backoff.
 
 ## Files touched
 `pyproject.toml`, `src/distillery/__init__.py`, `src/distillery/agent.py`,
