@@ -12,7 +12,8 @@ Returns reject indices and improvement notes for optional regeneration.
 import re
 from typing import Callable
 
-from finetune_agent.schemas import CritiqueResult, Dataset, DatasetConstraints, DatasetOutput, QAPair
+from distillery.critic_execution import CodeVerdict, validate_code_item
+from distillery.schemas import CritiqueResult, Dataset, DatasetConstraints, DatasetOutput, QAPair
 
 
 class DatasetCritic:
@@ -33,19 +34,27 @@ class DatasetCritic:
         aggressive: bool = False,
         progress_callback: Callable[[str], None] | None = None,
         constraints: DatasetConstraints | None = None,
+        execute_tests: bool = False,
     ):
         """Initialize the critic.
-        
+
         Args:
             llm_client: Optional LLM client for enhanced critique
             aggressive: If True, apply stricter filtering criteria
             progress_callback: Optional callback for progress updates
             constraints: Optional dataset constraints for quality thresholds
+            execute_tests: If True, run the execution-based correctness gate on
+                code datasets (executes generated tests locally; opt-in)
         """
         self._llm = llm_client
         self._aggressive = aggressive
         self._progress_callback = progress_callback or (lambda x: None)
         self._constraints = constraints or DatasetConstraints()
+        self._execute_tests = execute_tests
+        # Per-item correctness verdicts from the last critique, keyed by
+        # dataset type then item index. Consumed by agent._track_rejections
+        # so debug.json can report execution/static failures.
+        self._code_verdicts: dict[str, dict[int, "CodeVerdict"]] = {}
         
         # Apply constraints to thresholds
         self.MIN_ANSWER_LENGTH = self._constraints.min_answer_length
@@ -58,7 +67,7 @@ class DatasetCritic:
     def llm(self):
         """Lazy-load LLM client."""
         if self._llm is None:
-            from finetune_agent.llm import get_llm_client
+            from distillery.llm import get_llm_client
             self._llm = get_llm_client()
         return self._llm
     
@@ -358,10 +367,11 @@ Be constructive but thorough. Only reject items with clear issues."""
             CritiqueResult with reject indices and notes
         """
         self._report_progress(f"Critiquing dataset: {dataset.type}")
-        
+
         reject_indices: set[int] = set()
         improvement_notes: list[str] = []
         low_quality_indices: list[int] = []
+        self._code_verdicts[dataset.type] = {}
         
         # Rule-based checks
         # Track rejection reasons for reporting
@@ -438,6 +448,22 @@ Be constructive but thorough. Only reject items with clear issues."""
                             if f"Item {i}: Missing code (code ratio enforcement)" not in improvement_notes:
                                 improvement_notes.append(f"Item {i}: Missing code (code ratio enforcement)")
         
+        # Correctness gate (opt-in): execute/statically-check generated code and
+        # reject items that are broken. Skipped items (external deps) are kept.
+        if self._execute_tests and dataset.type in ("testcase_generation", "testcase"):
+            self._report_progress(f"Running correctness gate on {dataset.type}...")
+            for i, item in enumerate(dataset.items):
+                verdict = validate_code_item(item, dataset.type)
+                self._code_verdicts[dataset.type][i] = verdict
+                if verdict.is_reject:
+                    reject_indices.add(i)
+                    if i not in low_quality_indices:
+                        low_quality_indices.append(i)
+                    for reason in verdict.reasons:
+                        note = f"Item {i}: [{verdict.verdict.value}] {reason}"
+                        if note not in improvement_notes:
+                            improvement_notes.append(note)
+
         # LLM-enhanced critique
         llm_result = self._llm_critique(dataset.items)
         

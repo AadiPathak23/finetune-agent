@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from finetune_agent.memory.store import MemoryStore
-from finetune_agent.schemas import RunSummary, UserProfile
+from distillery.memory.store import MemoryStore
+from distillery.schemas import RunSummary, UserProfile
 
 
 class LocalMemoryStore(MemoryStore):

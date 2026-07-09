@@ -7,12 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from finetune_agent.critic import DatasetCritic
-from finetune_agent.dataset_generator import DatasetGenerator
-from finetune_agent.evaluator import Evaluator
-from finetune_agent.memory import get_memory_store
-from finetune_agent.planner import Planner
-from finetune_agent.schemas import (
+from distillery.critic import DatasetCritic
+from distillery.dataset_generator import DatasetGenerator
+from distillery.evaluator import Evaluator
+from distillery.memory import get_memory_store
+from distillery.planner import Planner
+from distillery.schemas import (
     CritiqueResult,
     DatasetOutput,
     GenerationRequest,
@@ -21,8 +21,8 @@ from finetune_agent.schemas import (
     UserConstraints,
     UserProfile,
 )
-from finetune_agent.exporter import export_all_formats
-from finetune_agent.utils import (
+from distillery.exporter import export_all_formats
+from distillery.utils import (
     create_output_dir,
     generate_run_id,
     save_json,
@@ -84,7 +84,7 @@ class FinetuneAgent:
     def llm(self):
         """Lazy-load LLM client."""
         if self._llm is None:
-            from finetune_agent.llm import get_llm_client
+            from distillery.llm import get_llm_client
             self._llm = get_llm_client()
         return self._llm
     
@@ -174,7 +174,20 @@ class FinetuneAgent:
                     continue
                     
                 item = items[idx]
-                
+
+                # Correctness-gate verdicts have no structural "issue" strings,
+                # so report them directly from the critic's stored verdicts.
+                code_verdicts = getattr(self.critic, "_code_verdicts", {})
+                code_verdict = code_verdicts.get(dtype, {}).get(idx)
+                if code_verdict is not None and code_verdict.is_reject:
+                    reason_key = code_verdict.verdict.value
+                    reasons[reason_key] = reasons.get(reason_key, 0) + 1
+                    if reason_key not in samples:
+                        samples[reason_key] = {
+                            "question": item.question[:400],
+                            "answer_snippet": item.answer[:400],
+                        }
+
                 # Re-check to get specific rejection reasons
                 answer_issues = self.critic._check_answer_quality(item, dataset_type=dtype)
                 question_issues = self.critic._check_question_quality(item)
@@ -335,6 +348,7 @@ class FinetuneAgent:
             aggressive=constraints.aggressive_filtering,
             progress_callback=self._progress_callback,
             constraints=constraints.dataset_constraints,
+            execute_tests=constraints.validate_generated_code,
         )
         
         critiques = self.critic.critique(dataset)
@@ -545,7 +559,7 @@ class FinetuneAgent:
             # Combine existing items with new ones
             combined_items = list(ds.items) + list(new_items)
             
-            from finetune_agent.schemas import Dataset
+            from distillery.schemas import Dataset
             updated_datasets.append(Dataset(
                 type=ds.type,
                 items=combined_items,

@@ -1,4 +1,4 @@
-"""Finetune Agent - An agentic AI assistant for finetuning engineering."""
+"""Distillery - An agentic AI assistant for finetuning engineering."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    # In the src/ layout this file is src/finetune_agent/__init__.py, so the
+    # In the src/ layout this file is src/distillery/__init__.py, so the
     # project root is two parents up. Fall back to a cwd-based search otherwise.
     _root_env = Path(__file__).resolve().parents[2] / ".env"
     if _root_env.exists():

@@ -1,4 +1,4 @@
-"""LLM abstraction layer for finetune agent."""
+"""LLM abstraction layer for Distillery."""
 
 import os
 from typing import TYPE_CHECKING
@@ -33,11 +33,17 @@ def get_llm_client(
     provider = provider.lower()
     
     if provider == "openai":
-        # Accept GROQ_API_KEY too so Groq's OpenAI-compatible endpoint works
-        # (OPENAI_API_KEY still takes precedence; existing OpenAI path unchanged).
-        api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
+        # Honor an explicit api_key kwarg first (e.g. a key pasted in the UI),
+        # then fall back to env. Accept GROQ_API_KEY too so Groq's
+        # OpenAI-compatible endpoint works (OPENAI_API_KEY takes precedence).
+        api_key = (
+            kwargs.pop("api_key", None)
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("GROQ_API_KEY")
+        )
         if api_key:
             from .openai import OpenAIClient
+            # base_url / model still flow through **kwargs to the client.
             return OpenAIClient(api_key=api_key, **kwargs)
         else:
             # Fall back to mock if no API key

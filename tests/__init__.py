@@ -1,1 +1,1 @@
-"""Test suite for finetune_agent."""
+"""Test suite for distillery."""

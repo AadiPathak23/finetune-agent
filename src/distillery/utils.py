@@ -1,4 +1,4 @@
-"""Utility functions for the finetune agent."""
+"""Utility functions for the Distillery."""
 
 import uuid
 from datetime import datetime

@@ -1,4 +1,4 @@
-"""Streamlit UI for Finetune Agent."""
+"""Streamlit UI for Distillery."""
 
 __all__ = ["run_app"]
 

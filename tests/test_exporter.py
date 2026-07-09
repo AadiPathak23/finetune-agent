@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from finetune_agent.exporter import (
+from distillery.exporter import (
     export_all_formats,
     export_chat_jsonl,
     export_instruct_jsonl,
     export_qa_jsonl,
     sample_golden_set,
 )
-from finetune_agent.schemas import Dataset, DatasetOutput, QAPair
+from distillery.schemas import Dataset, DatasetOutput, QAPair
 
 
 @pytest.fixture

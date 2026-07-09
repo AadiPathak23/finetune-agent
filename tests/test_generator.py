@@ -2,9 +2,9 @@
 
 import pytest
 
-from finetune_agent.dataset_generator import DatasetGenerator, TemplateGenerator
-from finetune_agent.llm.mock import MockLLMClient
-from finetune_agent.schemas import GenerationRequest, UserConstraints
+from distillery.dataset_generator import DatasetGenerator, TemplateGenerator
+from distillery.llm.mock import MockLLMClient
+from distillery.schemas import GenerationRequest, UserConstraints
 
 
 @pytest.fixture

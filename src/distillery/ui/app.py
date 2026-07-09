@@ -1,6 +1,6 @@
-"""Streamlit UI for Finetune Agent.
+"""Streamlit UI for Distillery.
 
-Run with: streamlit run src/finetune_agent/ui/app.py
+Run with: streamlit run src/distillery/ui/app.py
 """
 
 import json
@@ -15,9 +15,9 @@ src_path = Path(__file__).parent.parent.parent
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from finetune_agent.agent import FinetuneAgent
-from finetune_agent.exporter import export_chat_jsonl, export_instruct_jsonl, export_qa_jsonl
-from finetune_agent.schemas import DatasetConstraints, ModelFamily, UserConstraints
+from distillery.agent import FinetuneAgent
+from distillery.exporter import export_chat_jsonl, export_instruct_jsonl, export_qa_jsonl
+from distillery.schemas import DatasetConstraints, ModelFamily, UserConstraints
 
 
 # =============================================================================
@@ -25,7 +25,7 @@ from finetune_agent.schemas import DatasetConstraints, ModelFamily, UserConstrai
 # =============================================================================
 
 st.set_page_config(
-    page_title="Finetune Agent",
+    page_title="Distillery",
     page_icon="🔧",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -51,9 +51,21 @@ def init_session_state():
     if "ollama_host" not in st.session_state:
         st.session_state.ollama_host = "http://localhost:11434"
     if "ollama_model" not in st.session_state:
-        st.session_state.ollama_model = "qwen2.5-coder"
+        st.session_state.ollama_model = "qwen2.5:7b-instruct"
     if "ollama_status" not in st.session_state:
         st.session_state.ollama_status = None
+    # OpenAI-compatible (bring-your-own-key) settings — session-only, never
+    # written to disk.
+    if "openai_preset" not in st.session_state:
+        st.session_state.openai_preset = "OpenAI"
+    if "openai_api_key" not in st.session_state:
+        st.session_state.openai_api_key = ""
+    if "openai_base_url" not in st.session_state:
+        st.session_state.openai_base_url = "https://api.openai.com/v1"
+    if "openai_model" not in st.session_state:
+        st.session_state.openai_model = "gpt-4o-mini"
+    if "openai_status" not in st.session_state:
+        st.session_state.openai_status = None
 
 
 init_session_state()
@@ -66,22 +78,54 @@ init_session_state()
 def check_ollama_connection(host: str, model: str) -> tuple[bool, str]:
     """Check Ollama connection status."""
     try:
-        from finetune_agent.llm.ollama import OllamaClient
+        from distillery.llm.ollama import OllamaClient
         client = OllamaClient(host=host, model=model)
         return client.check_connection()
     except Exception as e:
         return False, f"Error: {e}"
 
 
-def get_llm_client_for_provider(provider: str, ollama_host: str = None, ollama_model: str = None):
+def check_openai_connection(api_key: str, base_url: str, model: str) -> tuple[bool, str]:
+    """Check an OpenAI-compatible endpoint by making a tiny generation call."""
+    from distillery.llm import get_llm_client
+    try:
+        client = get_llm_client(
+            provider="openai",
+            api_key=api_key or None,
+            base_url=base_url or None,
+            model=model or None,
+        )
+        if client.provider_name != "openai":
+            return False, "No API key provided — would fall back to mock."
+        client.generate("ping", max_tokens=5)
+        return True, f"Connected — model '{client.model_name}' responded."
+    except Exception as e:
+        return False, f"Connection failed: {e}"
+
+
+def get_llm_client_for_provider(
+    provider: str,
+    ollama_host: str = None,
+    ollama_model: str = None,
+    openai_api_key: str = None,
+    openai_base_url: str = None,
+    openai_model: str = None,
+):
     """Get LLM client based on selected provider."""
-    from finetune_agent.llm import get_llm_client
-    
+    from distillery.llm import get_llm_client
+
     if provider == "ollama":
         return get_llm_client(
             provider="ollama",
             host=ollama_host or st.session_state.ollama_host,
             model=ollama_model or st.session_state.ollama_model,
+        )
+    elif provider == "openai":
+        return get_llm_client(
+            provider="openai",
+            api_key=(openai_api_key or st.session_state.openai_api_key) or None,
+            base_url=(openai_base_url or st.session_state.openai_base_url) or None,
+            model=(openai_model or st.session_state.openai_model) or None,
         )
     else:
         return get_llm_client(provider=provider)
@@ -91,7 +135,7 @@ def get_llm_client_for_provider(provider: str, ollama_host: str = None, ollama_m
 # Header
 # =============================================================================
 
-st.title("🔧 Finetune Agent")
+st.title("🔧 Distillery")
 st.markdown("**Agentic AI for finetuning engineering**")
 st.markdown("---")
 
@@ -167,13 +211,59 @@ with left_col:
                     """)
     
     elif selected_provider == "openai":
-        import os
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            st.success("✅ OpenAI API key configured")
-        else:
-            st.warning("⚠️ Set OPENAI_API_KEY environment variable")
-    
+        with st.expander("🔑 OpenAI-compatible Settings", expanded=True):
+            # Presets pre-fill base URL + a sensible default model. "Custom"
+            # lets the user point at any OpenAI-compatible endpoint.
+            presets = {
+                "OpenAI": ("https://api.openai.com/v1", "gpt-4o-mini"),
+                "Groq": ("https://api.groq.com/openai/v1", "llama-3.1-8b-instant"),
+                "Custom": (st.session_state.openai_base_url, st.session_state.openai_model),
+            }
+            preset_names = list(presets.keys())
+            preset = st.selectbox(
+                "Preset",
+                options=preset_names,
+                index=preset_names.index(st.session_state.openai_preset)
+                if st.session_state.openai_preset in preset_names
+                else 0,
+                help="Pick a provider to pre-fill the base URL and model.",
+            )
+            # When the preset changes, refresh base URL + model to its defaults.
+            if preset != st.session_state.openai_preset and preset != "Custom":
+                st.session_state.openai_base_url, st.session_state.openai_model = presets[preset]
+            st.session_state.openai_preset = preset
+
+            st.session_state.openai_api_key = st.text_input(
+                "API key",
+                value=st.session_state.openai_api_key,
+                type="password",
+                help="Kept in this session only — never written to disk.",
+            )
+            st.session_state.openai_base_url = st.text_input(
+                "Base URL",
+                value=st.session_state.openai_base_url,
+            )
+            st.session_state.openai_model = st.text_input(
+                "Model",
+                value=st.session_state.openai_model,
+                help="e.g. gpt-4o-mini, llama-3.1-8b-instant, llama-3.3-70b-versatile",
+            )
+
+            if st.button("🔄 Test Connection", use_container_width=True):
+                with st.spinner("Testing connection..."):
+                    st.session_state.openai_status = check_openai_connection(
+                        st.session_state.openai_api_key,
+                        st.session_state.openai_base_url,
+                        st.session_state.openai_model,
+                    )
+
+            if st.session_state.openai_status is not None:
+                ok, message = st.session_state.openai_status
+                (st.success if ok else st.error)(f"{'✅' if ok else '❌'} {message}")
+
+            if not st.session_state.openai_api_key:
+                st.caption("No key set yet — generation would fall back to mock.")
+
     elif selected_provider == "mock":
         st.info("ℹ️ Using mock LLM for testing (no API calls)")
     
@@ -255,7 +345,18 @@ with left_col:
         value=False,
         help="Enable stricter quality thresholds (may reduce output quantity)",
     )
-    
+
+    # Correctness gate (runs generated tests locally)
+    validate_generated_code = st.toggle(
+        "✅ Validate generated code (runs tests)",
+        value=False,
+        help=(
+            "For test-case datasets, statically check and execute self-contained "
+            "generated tests, rejecting ones that fail. Runs LLM-generated code "
+            "locally in a sandboxed subprocess — enable only if you trust the run."
+        ),
+    )
+
     # Domain (optional)
     domain = st.text_input(
         "Domain focus (optional)",
@@ -355,6 +456,9 @@ with left_col:
                 selected_provider,
                 ollama_host=st.session_state.ollama_host if selected_provider == "ollama" else None,
                 ollama_model=st.session_state.ollama_model if selected_provider == "ollama" else None,
+                openai_api_key=st.session_state.openai_api_key if selected_provider == "openai" else None,
+                openai_base_url=st.session_state.openai_base_url if selected_provider == "openai" else None,
+                openai_model=st.session_state.openai_model if selected_provider == "openai" else None,
             )
         except Exception as e:
             st.error(f"Failed to initialize LLM client: {e}")
@@ -385,6 +489,7 @@ with left_col:
             model_family=model_family,
             aggressive_filtering=aggressive_filtering,
             dataset_constraints=dataset_constraints,
+            validate_generated_code=validate_generated_code,
         )
         
         # Run the agent
@@ -865,7 +970,7 @@ with right_col:
 # =============================================================================
 
 st.markdown("---")
-footer_text = "Finetune Agent v2.0 | Built for the fine-tuning community"
+footer_text = "Distillery v2.0 | Built for the fine-tuning community"
 if st.session_state.llm_provider == "ollama":
     footer_text += f" | Ollama: {st.session_state.ollama_model}"
 st.caption(footer_text)

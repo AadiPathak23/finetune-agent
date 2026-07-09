@@ -1,4 +1,4 @@
-"""Command-line interface for the finetune agent.
+"""Command-line interface for the Distillery.
 
 V2: Enhanced with model family selection, filtering options, and better progress.
 """
@@ -13,8 +13,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 
-from finetune_agent.agent import FinetuneAgent
-from finetune_agent.schemas import DatasetConstraints, ModelFamily, UserConstraints, UserProfile
+from distillery.agent import FinetuneAgent
+from distillery.schemas import DatasetConstraints, ModelFamily, UserConstraints, UserProfile
 
 
 # Force UTF-8 output on Windows
@@ -25,7 +25,7 @@ def print_banner():
     """Print the application banner."""
     banner = """
 +---------------------------------------------------------------+
-|                  FINETUNE AGENT v2.0                          |
+|                  DISTILLERY v2.0                          |
 |         Agentic AI for Finetuning Engineering                 |
 |                                                               |
 |   This tool does NOT train models.                            |
@@ -446,7 +446,7 @@ def main():
     
     # Show LLM provider info
     try:
-        from finetune_agent.llm import get_llm_client
+        from distillery.llm import get_llm_client
         llm = get_llm_client()
         console.print(f"[dim]LLM Provider: {llm.provider_name}[/dim]")
     except Exception:

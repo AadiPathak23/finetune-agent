@@ -7,13 +7,25 @@ import json
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 
-from finetune_agent.llm.ollama import OllamaClient, OllamaConnectionError
+from distillery.llm.ollama import OllamaClient, OllamaConnectionError
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ollama_env(monkeypatch):
+    """Clear ambient Ollama/provider env so a local .env can't change defaults.
+
+    The package auto-loads a project-root .env on import; without this, a
+    developer's OLLAMA_MODEL/OLLAMA_HOST would override the class defaults these
+    tests assert against.
+    """
+    for var in ("OLLAMA_MODEL", "OLLAMA_HOST", "LLM_PROVIDER"):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture
 def mock_httpx_client():
     """Create a mock httpx client."""
-    with patch("finetune_agent.llm.ollama.httpx.Client") as mock:
+    with patch("distillery.llm.ollama.httpx.Client") as mock:
         client_instance = MagicMock()
         mock.return_value = client_instance
         yield client_instance
@@ -295,14 +307,14 @@ class TestLLMFactoryIntegration:
         """Test that factory returns OllamaClient for provider=ollama."""
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         
-        from finetune_agent.llm import get_llm_client
+        from distillery.llm import get_llm_client
         client = get_llm_client()
         
         assert client.provider_name == "ollama"
     
     def test_factory_with_kwargs(self, mock_httpx_client):
         """Test that factory passes kwargs to OllamaClient."""
-        from finetune_agent.llm import get_llm_client
+        from distillery.llm import get_llm_client
         
         client = get_llm_client(
             provider="ollama",

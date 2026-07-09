@@ -3,7 +3,7 @@
 import os
 from abc import ABC, abstractmethod
 
-from finetune_agent.schemas import RunSummary, UserProfile
+from distillery.schemas import RunSummary, UserProfile
 
 
 class MemoryStore(ABC):
@@ -44,7 +44,7 @@ def get_memory_store() -> MemoryStore:
     
     if redis_url:
         try:
-            from finetune_agent.memory.redis_store import RedisMemoryStore
+            from distillery.memory.redis_store import RedisMemoryStore
             store = RedisMemoryStore(redis_url)
             # Test connection
             store._client.ping()
@@ -53,5 +53,5 @@ def get_memory_store() -> MemoryStore:
             # Fall back to local storage if Redis fails
             pass
     
-    from finetune_agent.memory.local_store import LocalMemoryStore
+    from distillery.memory.local_store import LocalMemoryStore
     return LocalMemoryStore()

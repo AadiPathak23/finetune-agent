@@ -11,7 +11,7 @@ from typing import Callable
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from finetune_agent.schemas import (
+from distillery.schemas import (
     DatasetOutput,
     EvaluationResult,
     HealthMetrics,
@@ -67,7 +67,7 @@ class Evaluator:
     def llm(self):
         """Lazy-load LLM client."""
         if self._llm is None:
-            from finetune_agent.llm import get_llm_client
+            from distillery.llm import get_llm_client
             self._llm = get_llm_client()
         return self._llm
     

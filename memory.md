@@ -1,13 +1,39 @@
-# Project Memory — Finetune Agent
+# Project Memory — Distillery
 
 > Working log of changes made to this codebase, so a fresh session (human or AI)
 > can pick up without re-deriving context. Newest context at top.
-> Last updated: 2026-06-30.
+> Last updated: 2026-07-09.
+
+## 2026-07-09 — Rebrand + BYO-key + correctness gate
+
+- **Renamed the project `finetune_agent` → `distillery`** (package dir `src/distillery/`,
+  distribution `distillery`, CLI command `distillery`, all imports, Redis key prefixes
+  `distillery:*`, display strings, run paths). Reinstalled editable (`pip install -e .`).
+  Rationale: the tool does dataset generation/critique/evaluation (a data pipeline), not
+  model fine-tuning. Local repo folder + GitHub repo rename are still **manual TODO**.
+- **Correctness gate** (`critic_execution.py`, new): execution-based validation for
+  `testcase_generation` items. Layered verdict — SYNTAX_FAIL → PARAMETRIZE_MISMATCH →
+  STATIC_FAIL (pyflakes undefined names) → EXEC_FAIL (self-contained snippets run under
+  `pytest` in a temp-dir subprocess) → SKIPPED_EXTERNAL_DEPS (imports outside stdlib+pytest
+  are **not** rejected — can't judge fairly). Opt-in via
+  `UserConstraints.validate_generated_code` + UI toggle; wired into `DatasetCritic`
+  (`execute_tests` flag) so rejects feed the existing refill loop. Reasons surfaced in
+  `debug.json` via `agent._track_rejections` (`critic._code_verdicts`). Added `pyflakes` dep.
+- **Bring-your-own-key**: `get_llm_client` now honors an explicit `api_key` kwarg (was
+  deciding mock-fallback from env only, ignoring a UI-pasted key). UI gained an
+  "OpenAI-compatible Settings" panel (OpenAI/Groq/Custom presets, password key field,
+  base URL, model, Test Connection). Key is session-only, never written to disk. Added
+  `OpenAIClient.model_name` property.
+- **Tests**: `test_critic_execution.py`, `test_llm_factory.py`; made `test_ollama.py`
+  hermetic (autouse fixture clears `OLLAMA_*`/`LLM_PROVIDER` so a local `.env` can't break
+  default-asserting tests). Full suite: **131 passing**.
+- Verified earlier that the structural Critic passes tests that *fail when run* (e.g.
+  `process_text` expects `'Hel'` but code returns `'Hello'`) — that finding motivated the gate.
 
 ## What this project is
 
 An agentic tool that generates fine-tuning datasets (Q&A pairs) for code LLMs.
-Pipeline lives in `src/finetune_agent/agent.py` (`FinetuneAgent.run`):
+Pipeline lives in `src/distillery/agent.py` (`FinetuneAgent.run`):
 
 `Planner → Generator → Critic → refill loop → filter → Evaluator → export`
 
@@ -36,7 +62,7 @@ OPENAI_MODEL=llama-3.1-8b-instant
   produces canned/templated output (not a real model).
 - Sanity check the resolved provider:
   ```
-  python -c "import sys; sys.path.insert(0,'src'); import finetune_agent; from finetune_agent.llm import get_llm_client as g; c=g(); print(c.provider_name, getattr(c,'_model',''))"
+  python -c "import sys; sys.path.insert(0,'src'); import distillery; from distillery.llm import get_llm_client as g; c=g(); print(c.provider_name, getattr(c,'_model',''))"
   ```
   Must print `openai ...`, not `mock`.
 
@@ -78,7 +104,7 @@ Root causes identified (still partly open — see "Known issues / TODO"):
   fallback now actually works.
 
 ### 5. `.env` auto-loading
-- `src/finetune_agent/__init__.py`: loads project-root `.env` via `python-dotenv` on
+- `src/distillery/__init__.py`: loads project-root `.env` via `python-dotenv` on
   import (covers CLI, `python -m`, Streamlit, tests). Shell vars override the file
   (`override=False`). Degrades silently if `python-dotenv` is missing.
 - `pyproject.toml`: added `python-dotenv>=1.0.0`.
@@ -105,6 +131,6 @@ Root causes identified (still partly open — see "Known issues / TODO"):
       Evaluator have their own try/except fallbacks but no backoff — could add later.
 
 ## Files touched
-`pyproject.toml`, `src/finetune_agent/__init__.py`, `src/finetune_agent/agent.py`,
-`src/finetune_agent/dataset_generator.py`, `src/finetune_agent/llm/__init__.py`,
-`src/finetune_agent/llm/openai.py`, plus new `.env.example` and this `memory.md`.
+`pyproject.toml`, `src/distillery/__init__.py`, `src/distillery/agent.py`,
+`src/distillery/dataset_generator.py`, `src/distillery/llm/__init__.py`,
+`src/distillery/llm/openai.py`, plus new `.env.example` and this `memory.md`.

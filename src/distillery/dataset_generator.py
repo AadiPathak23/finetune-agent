@@ -8,7 +8,7 @@ import random
 import time
 from typing import Any, Callable
 
-from finetune_agent.schemas import (
+from distillery.schemas import (
     Dataset,
     DatasetIntent,
     DatasetOutput,
@@ -294,7 +294,7 @@ class LLMDatasetGenerator:
     def llm(self):
         """Lazy-load LLM client."""
         if self._llm is None:
-            from finetune_agent.llm import get_llm_client
+            from distillery.llm import get_llm_client
             self._llm = get_llm_client()
         return self._llm
     
@@ -517,7 +517,7 @@ Generate exactly {count} items. Make them production-quality."""
     ) -> list[QAPair]:
         """Fallback template-based batch generation."""
         # Reuse template generator logic
-        from finetune_agent.schemas import UserConstraints
+        from distillery.schemas import UserConstraints
         request = GenerationRequest(
             prompt="",
             dataset_types=[dataset_type],
@@ -656,7 +656,7 @@ Generate exactly {count} items. EVERY answer MUST include valid pytest code meet
             intents = self.generate_intents(dataset_type, request.prompt)
             if not intents:
                 # Fallback if no intents generated
-                from finetune_agent.schemas import DatasetIntent
+                from distillery.schemas import DatasetIntent
                 intents = [DatasetIntent(label="general", description="General purpose")]
             intent_labels = [i.label for i in intents]
             

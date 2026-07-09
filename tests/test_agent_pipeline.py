@@ -8,10 +8,10 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from finetune_agent.agent import FinetuneAgent
-from finetune_agent.llm.mock import MockLLMClient
-from finetune_agent.schemas import UserConstraints, DatasetConstraints
-from finetune_agent.critic import DatasetCritic
+from distillery.agent import FinetuneAgent
+from distillery.llm.mock import MockLLMClient
+from distillery.schemas import UserConstraints, DatasetConstraints
+from distillery.critic import DatasetCritic
 
 
 @pytest.fixture

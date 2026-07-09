@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from finetune_agent.schemas import Dataset, DatasetOutput, QAPair
+from distillery.schemas import Dataset, DatasetOutput, QAPair
 
 
 # =============================================================================

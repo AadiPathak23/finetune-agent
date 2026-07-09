@@ -1,11 +1,11 @@
 [project]
-name = "finetune-agent"
+name = "distillery"
 version = "0.1.0"
 description = "An agentic AI assistant for finetuning engineering that generates action plans and training datasets"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Finetune Agent Team" }]
+authors = [{ name = "Distillery Team" }]
 
 dependencies = [
     "pydantic>=2.0.0",
@@ -15,6 +15,7 @@ dependencies = [
     "httpx>=0.25.0",
     "streamlit>=1.30.0",
     "python-dotenv>=1.0.0",
+    "pyflakes>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -24,14 +25,14 @@ dev = [
 ]
 
 [project.scripts]
-finetune-agent = "finetune_agent.cli:main"
+distillery = "distillery.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/finetune_agent"]
+packages = ["src/distillery"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -5,15 +5,15 @@ from datetime import datetime
 
 import redis
 
-from finetune_agent.memory.store import MemoryStore
-from finetune_agent.schemas import RunSummary, UserProfile
+from distillery.memory.store import MemoryStore
+from distillery.schemas import RunSummary, UserProfile
 
 
 class RedisMemoryStore(MemoryStore):
     """Redis-based memory storage."""
     
-    PROFILE_KEY = "finetune_agent:profile"
-    RUNS_KEY = "finetune_agent:runs"
+    PROFILE_KEY = "distillery:profile"
+    RUNS_KEY = "distillery:runs"
     
     def __init__(self, redis_url: str):
         """Initialize Redis connection."""

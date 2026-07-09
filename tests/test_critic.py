@@ -2,9 +2,9 @@
 
 import pytest
 
-from finetune_agent.critic import DatasetCritic
-from finetune_agent.llm.mock import MockLLMClient
-from finetune_agent.schemas import Dataset, DatasetOutput, QAPair
+from distillery.critic import DatasetCritic
+from distillery.llm.mock import MockLLMClient
+from distillery.schemas import Dataset, DatasetOutput, QAPair
 
 
 @pytest.fixture
@@ -216,7 +216,7 @@ class TestDatasetFiltering:
             ],
         )
         
-        from finetune_agent.schemas import CritiqueResult
+        from distillery.schemas import CritiqueResult
         critique = CritiqueResult(reject_indices=[1])
         
         filtered = critic.filter_dataset(dataset, critique)
@@ -227,7 +227,7 @@ class TestDatasetFiltering:
     
     def test_filter_preserves_non_rejected_items(self, critic, sample_dataset):
         """Filtering should preserve items not in reject list."""
-        from finetune_agent.schemas import CritiqueResult
+        from distillery.schemas import CritiqueResult
         critique = CritiqueResult(reject_indices=[])
         
         filtered = critic.filter_dataset(sample_dataset, critique)
@@ -278,7 +278,7 @@ class TestFullCritiquePipeline:
             ],
         )
         
-        from finetune_agent.schemas import CritiqueResult
+        from distillery.schemas import CritiqueResult
         critiques = {
             "bugfixing": CritiqueResult(reject_indices=[0]),
         }

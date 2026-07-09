@@ -2,9 +2,9 @@
 
 import pytest
 
-from finetune_agent.evaluator import Evaluator
-from finetune_agent.llm.mock import MockLLMClient
-from finetune_agent.schemas import Dataset, DatasetOutput, QAPair
+from distillery.evaluator import Evaluator
+from distillery.llm.mock import MockLLMClient
+from distillery.schemas import Dataset, DatasetOutput, QAPair
 
 
 @pytest.fixture

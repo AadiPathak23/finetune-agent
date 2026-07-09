@@ -1,4 +1,4 @@
-# Finetune Agent 🤖
+# Distillery 🤖
 
 A production-oriented agentic AI system for generating, critiquing, and evaluating LLM fine-tuning datasets.
 
@@ -11,7 +11,7 @@ A production-oriented agentic AI system for generating, critiquing, and evaluati
 
 ## Overview
 
-Fine-tuning LLMs requires high-quality training data. Building that data by hand is slow, inconsistent, and hard to evaluate. Finetune Agent automates the entire dataset engineering workflow through a multi-stage agentic pipeline.
+Fine-tuning LLMs requires high-quality training data. Building that data by hand is slow, inconsistent, and hard to evaluate. Distillery automates the entire dataset engineering workflow through a multi-stage agentic pipeline.
 
 The system follows a **Planner, Generator, Critic, Evaluator** architecture. Each stage operates as an independent agent with a well-defined responsibility. The Critic enforces strict dataset contracts (validated with pytest-style checks) and automatically rejects items that fail quality thresholds. Rejected slots are backfilled through an automated refill loop until the target count is met or retry limits are exhausted.
 
@@ -62,7 +62,7 @@ action_plan.md  dataset.json   (filter/refill)  evaluation.json
 
 ```bash
 git clone <repository-url>
-cd finetune-agent
+cd distillery
 pip install -e ".[dev]"
 ```
 
@@ -71,13 +71,13 @@ pip install -e ".[dev]"
 No API key required. Uses a deterministic template backend for testing the pipeline end to end.
 
 ```bash
-python -m finetune_agent
+python -m distillery
 ```
 
 ### Run Streamlit UI
 
 ```bash
-streamlit run src/finetune_agent/ui/app.py
+streamlit run src/distillery/ui/app.py
 ```
 
 ### Run with Local LLM (Ollama)
@@ -89,7 +89,7 @@ ollama pull qwen2.5-coder
 
 # 3. Set the provider and run
 set LLM_PROVIDER=ollama
-streamlit run src/finetune_agent/ui/app.py
+streamlit run src/distillery/ui/app.py
 ```
 
 On Linux/macOS, replace `set` with `export`.
@@ -113,8 +113,8 @@ The pipeline generates 50 Q&A pairs where each answer contains a fenced Python c
 ## Project Structure
 
 ```
-finetune-agent/
-├── src/finetune_agent/
+distillery/
+├── src/distillery/
 │   ├── agent.py              # Pipeline orchestration
 │   ├── planner.py            # Action plan generation
 │   ├── dataset_generator.py  # Intent-driven Q&A generation

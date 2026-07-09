@@ -60,7 +60,12 @@ class OpenAIClient(LLMClient):
     @property
     def provider_name(self) -> str:
         return "openai"
-    
+
+    @property
+    def model_name(self) -> str:
+        """Return the model name being used (mirrors OllamaClient)."""
+        return self._model
+
     def generate(self, prompt: str, max_tokens: int = 2000) -> str:
         """Generate text using OpenAI chat completions API."""
         response = self._client.post(

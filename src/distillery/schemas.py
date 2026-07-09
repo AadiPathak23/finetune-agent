@@ -1,4 +1,4 @@
-"""Pydantic schemas for the finetune agent."""
+"""Pydantic schemas for the Distillery."""
 
 from datetime import datetime
 from enum import Enum
@@ -218,6 +218,9 @@ class UserConstraints(BaseModel):
     aggressive_filtering: bool = False
     # V2.1 additions: advanced quality constraints
     dataset_constraints: DatasetConstraints = Field(default_factory=DatasetConstraints)
+    # V2.2: correctness gate — execute generated tests and reject broken ones.
+    # Opt-in because it runs LLM-generated code locally in a subprocess.
+    validate_generated_code: bool = False
 
 
 class GenerationRequest(BaseModel):
