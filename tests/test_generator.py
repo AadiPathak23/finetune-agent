@@ -289,9 +289,25 @@ class TestV2Features:
     def test_metadata_includes_v2_fields(self, generator, sample_request):
         """V2 metadata should include difficulty and training value."""
         result = generator.generate(sample_request)
-        
+
         for dataset in result.datasets:
             for item in dataset.items:
                 assert "difficulty" in item.metadata
                 assert "estimated_training_value" in item.metadata
                 assert "source" in item.metadata
+
+
+class TestSelfContainedTestcasePrompt:
+    """The testcase prompt must instruct the model to emit runnable, self-contained code."""
+
+    def test_prompt_requires_self_contained_code(self, generator):
+        from distillery.schemas import DatasetIntent
+
+        intent = DatasetIntent(label="boundary_conditions", description="edge cases")
+        prompt = generator._get_testcase_generation_prompt(
+            count=3, intent=intent, difficulty="medium", tone="technical", existing_context=""
+        )
+        assert "SELF-CONTAINED" in prompt
+        # The example must define the implementation in-block (no undefined SomeClass).
+        assert "class Calculator" in prompt
+        assert "SomeClass" not in prompt

@@ -601,7 +601,21 @@ with right_col:
             st.metric("Overall Rating", f"{rating:.1f}/100")
         with col4:
             st.metric("Output", Path(results["output_path"]).name)
-        
+
+        # Correctness-gate coverage — the headline "it actually verifies itself" stat
+        vcov = debug_info.get("verification_coverage", {})
+        if vcov:
+            graded = sum(s["graded"] for s in vcov.values())
+            executed = sum(s["executed"] for s in vcov.values())
+            passed = sum(s["passed"] for s in vcov.values())
+            rejected = sum(s["rejected"] for s in vcov.values())
+            skipped = sum(s["skipped_external_deps"] for s in vcov.values())
+            st.success(
+                f"🔬 **Correctness gate ran on {graded} generated tests** — "
+                f"{executed} executed under pytest ({passed} passed), "
+                f"{rejected} rejected as broken, {skipped} skipped (external deps)."
+            )
+
         # =====================================================================
         # ERROR PANEL: Show when total_items == 0
         # =====================================================================
@@ -879,16 +893,22 @@ with right_col:
                 st.warning(f"**Overall Rating: {rating:.1f}/100** — Acceptable, room for improvement")
             else:
                 st.error(f"**Overall Rating: {rating:.1f}/100** — Needs improvement")
-            
+
+            st.caption(
+                f"🎯 **Correctness (LLM-judge): {evaluation.correctness_score:.1f}/100** — "
+                "faithfulness + usefulness of the answers. This is the *correctness* axis, "
+                "distinct from the diversity scores below."
+            )
+
             st.markdown("---")
-            
+
             # Per-dataset scores
             st.subheader("Dataset Scores")
-            
+
             for eval_ds in evaluation.dataset_evaluations:
                 with st.expander(f"**{eval_ds.dataset_type}** — Uniqueness: {eval_ds.uniqueness_score:.1f}", expanded=True):
-                    col1, col2, col3, col4 = st.columns(4)
-                    
+                    col1, col2, col3, col4, col5 = st.columns(5)
+
                     with col1:
                         st.metric("Uniqueness", f"{eval_ds.uniqueness_score:.1f}")
                     with col2:
@@ -897,6 +917,8 @@ with right_col:
                         st.metric("Structural", f"{eval_ds.structural_score:.1f}")
                     with col4:
                         st.metric("Conceptual", f"{eval_ds.conceptual_score:.1f}")
+                    with col5:
+                        st.metric("Correctness", f"{eval_ds.correctness_score:.1f}")
                     
                     st.write(f"**Items**: {eval_ds.item_count}")
                     st.write(f"**Avg Question Length**: {eval_ds.avg_question_length:.0f} chars")

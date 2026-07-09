@@ -16,6 +16,7 @@ from distillery.schemas import (
     EvaluationResult,
     HealthMetrics,
     OverallEvaluation,
+    QAPair,
 )
 
 
@@ -37,11 +38,14 @@ class Evaluator:
         "conceptual": 0.20,
     }
     
-    # Weights for overall rating
+    # Weights for overall rating (must sum to 1.0). Correctness (LLM-judge of
+    # faithfulness/usefulness) is weighted alongside the diversity metrics so the
+    # headline rating reflects whether answers are actually right, not just varied.
     OVERALL_WEIGHTS = {
-        "uniqueness": 0.40,
-        "length_sanity": 0.25,
+        "uniqueness": 0.30,
+        "length_sanity": 0.20,
         "coverage": 0.35,
+        "correctness": 0.15,
     }
     
     def __init__(
@@ -273,7 +277,67 @@ Be objective and constructive."""
             self._report_progress(f"LLM conceptual scoring failed: {e}")
             # Fall back to structural variety as proxy
             return self._calculate_structural_variety(texts)
-    
+
+    # =========================================================================
+    # Correctness Scoring (LLM-judge)
+    # =========================================================================
+
+    def calculate_correctness_score(
+        self, items: list[QAPair]
+    ) -> tuple[float, dict[int, float]]:
+        """Judge per-item correctness (faithfulness + usefulness) via the LLM.
+
+        Unlike the lexical/structural/conceptual metrics — which only measure
+        *diversity* — this asks the model whether each answer is actually correct
+        and useful for training. That's the dimension the diversity scores can't
+        see. Returns ``(dataset_avg, {item_index: score})``.
+        """
+        if not items:
+            return 0.0, {}
+
+        self._report_progress("Judging answer correctness with LLM...")
+
+        # Sample to bound tokens (mirrors the conceptual-score sampling idiom).
+        sample = items[: min(10, len(items))]
+        lines = [
+            f"[{i}] Q: {it.question[:200]}\n    A: {it.answer[:400]}"
+            for i, it in enumerate(sample)
+        ]
+
+        prompt = f"""You are grading Q&A pairs for a code fine-tuning dataset. For each pair, judge:
+- faithfulness: is the answer technically correct/accurate (does the code work, are the facts right)?
+- usefulness: does it actually teach the skill the question asks for?
+
+Score each pair 0-100 (roughly the average of the two dimensions). Be strict: wrong code,
+undefined names, or misleading explanations should score below 50.
+
+Pairs:
+{chr(10).join(lines)}
+
+Return JSON:
+{{
+  "items": [{{"index": 0, "correctness_score": <0-100>, "issue": "<short reason or null>"}}],
+  "dataset_avg": <0-100>
+}}"""
+
+        try:
+            response = self.llm.generate_json(prompt)
+            per_item: dict[int, float] = {}
+            for entry in response.get("items", []):
+                idx = entry.get("index")
+                score = entry.get("correctness_score")
+                if idx is not None and score is not None:
+                    per_item[int(idx)] = min(100.0, max(0.0, float(score)))
+            if per_item:
+                avg = sum(per_item.values()) / len(per_item)
+            else:
+                avg = min(100.0, max(0.0, float(response.get("dataset_avg", 70))))
+            return round(avg, 2), per_item
+        except Exception as e:
+            self._report_progress(f"LLM correctness judging failed: {e}")
+            # Conservative neutral fallback — never fabricate a high score.
+            return 70.0, {}
+
     # =========================================================================
     # Health Metrics
     # =========================================================================
@@ -582,24 +646,29 @@ Be concise and practical."""
         
         evaluations = []
         all_uniqueness_scores = []
-        
+        all_correctness_scores = []
+
         for ds in dataset.datasets:
             self._report_progress(f"Evaluating dataset type: {ds.type}")
-            
+
             # Combine questions and answers for evaluation
             texts = [f"{item.question} {item.answer}" for item in ds.items]
-            
+
             # Calculate uniqueness with component breakdown
             uniqueness, lexical, structural, conceptual = self.calculate_uniqueness_score(texts)
             all_uniqueness_scores.append(uniqueness)
-            
+
+            # Judge correctness (faithfulness/usefulness) — the non-diversity axis
+            correctness, _ = self.calculate_correctness_score(ds.items)
+            all_correctness_scores.append(correctness)
+
             # Calculate lengths
             q_lengths = [len(item.question) for item in ds.items]
             a_lengths = [len(item.answer) for item in ds.items]
-            
+
             # Calculate per-dataset health metrics
             ds_health = self._calculate_dataset_health(ds)
-            
+
             evaluations.append(EvaluationResult(
                 dataset_type=ds.type,
                 uniqueness_score=round(uniqueness, 2),
@@ -609,18 +678,21 @@ Be concise and practical."""
                 lexical_score=lexical,
                 structural_score=structural,
                 conceptual_score=conceptual,
+                correctness_score=round(correctness, 2),
                 health_metrics=ds_health,
             ))
-        
+
         # Calculate overall rating
         avg_uniqueness = sum(all_uniqueness_scores) / len(all_uniqueness_scores) if all_uniqueness_scores else 0
+        avg_correctness = sum(all_correctness_scores) / len(all_correctness_scores) if all_correctness_scores else 0
         length_sanity = self._calculate_length_sanity(dataset)
         coverage = self._calculate_coverage(dataset)
-        
+
         overall_rating = (
             self.OVERALL_WEIGHTS["uniqueness"] * avg_uniqueness +
             self.OVERALL_WEIGHTS["length_sanity"] * length_sanity +
-            self.OVERALL_WEIGHTS["coverage"] * coverage
+            self.OVERALL_WEIGHTS["coverage"] * coverage +
+            self.OVERALL_WEIGHTS["correctness"] * avg_correctness
         )
         
         # Apply count penalty if requested_count is specified
@@ -647,6 +719,7 @@ Be concise and practical."""
         return OverallEvaluation(
             dataset_evaluations=evaluations,
             overall_rating=round(overall_rating, 2),
+            correctness_score=round(avg_correctness, 2),
             feedback=feedback,
             health_metrics=health_metrics,
             llm_feedback=llm_feedback,

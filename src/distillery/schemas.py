@@ -115,12 +115,14 @@ class EvaluationResult(BaseModel):
     lexical_score: float = Field(default=0.0, ge=0, le=100)
     structural_score: float = Field(default=0.0, ge=0, le=100)
     conceptual_score: float = Field(default=0.0, ge=0, le=100)
+    # V2.2: LLM-judge correctness (faithfulness/usefulness), not diversity
+    correctness_score: float = Field(default=0.0, ge=0, le=100)
     health_metrics: HealthMetrics = Field(default_factory=HealthMetrics)
 
 
 class OverallEvaluation(BaseModel):
     """Overall evaluation of all datasets."""
-    
+
     dataset_evaluations: list[EvaluationResult]
     overall_rating: float = Field(ge=0, le=100)
     feedback: list[str]
@@ -129,6 +131,8 @@ class OverallEvaluation(BaseModel):
     health_metrics: HealthMetrics = Field(default_factory=HealthMetrics)
     llm_feedback: str = ""
     warnings: list[str] = Field(default_factory=list)
+    # V2.2: dataset-wide correctness (avg of per-dataset LLM-judge scores)
+    correctness_score: float = Field(default=0.0, ge=0, le=100)
 
 
 class UserProfile(BaseModel):

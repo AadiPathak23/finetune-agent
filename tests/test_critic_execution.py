@@ -145,3 +145,37 @@ def test_extract_python_code_joins_blocks():
     answer = "intro\n```python\nx = 1\n```\nmid\n```python\ny = 2\n```"
     code = extract_python_code(answer)
     assert "x = 1" in code and "y = 2" in code
+
+
+def test_verification_coverage_rollup():
+    """agent._summarize_verification aggregates gate verdicts into a coverage stat."""
+    from distillery.agent import FinetuneAgent
+    from distillery.critic_execution import CodeVerdict, Verdict
+    from distillery.llm.mock import MockLLMClient
+
+    agent = FinetuneAgent(llm_client=MockLLMClient())
+
+    class _CriticStub:
+        pass
+
+    critic = _CriticStub()
+    critic._code_verdicts = {
+        "testcase_generation": {
+            0: CodeVerdict(Verdict.OK),
+            1: CodeVerdict(Verdict.EXEC_FAIL, ["assert failed"]),
+            2: CodeVerdict(Verdict.SKIPPED_EXTERNAL_DEPS, ["external"]),
+            3: CodeVerdict(Verdict.STATIC_FAIL, ["undefined name"]),
+        }
+    }
+    agent._critic = critic
+    debug = {"verification_coverage": {}}
+    agent._summarize_verification(debug)
+
+    s = debug["verification_coverage"]["testcase_generation"]
+    assert s == {
+        "graded": 4,
+        "executed": 2,      # OK + EXEC_FAIL actually ran
+        "passed": 1,        # OK
+        "rejected": 2,      # EXEC_FAIL + STATIC_FAIL
+        "skipped_external_deps": 1,
+    }

@@ -4,6 +4,31 @@
 > can pick up without re-deriving context. Newest context at top.
 > Last updated: 2026-07-09.
 
+## 2026-07-09 (2) — Push to a defensible 10/10 (correctness + polish)
+
+Closed the two substance gaps from the 7.5/10 audit, plus public-readiness polish.
+
+- **Correctness scoring (`evaluator.py`)** — new `calculate_correctness_score(items)`: LLM-judge
+  rates each pair 0-100 on faithfulness + usefulness (reuses the `generate_json` pattern; neutral
+  70.0 fallback, never fabricates high). Folded into `overall_rating` via `OVERALL_WEIGHTS`
+  (rebalanced to uniqueness 0.30 / length 0.20 / coverage 0.35 / **correctness 0.15**). New
+  `correctness_score` field on `EvaluationResult` + `OverallEvaluation`; shown in the UI.
+- **Self-contained test generation (`dataset_generator.py`)** — `_get_testcase_generation_prompt`
+  now requires impl + test in ONE runnable block (stdlib+pytest only), and the example defines its
+  class inline. This flips most gate verdicts from `SKIPPED_EXTERNAL_DEPS` → `OK`/`EXEC_FAIL`, so the
+  gate actually verifies the majority of items instead of ~10%.
+- **Verification-coverage telemetry (`agent.py`)** — `_summarize_verification` rolls
+  `critic._code_verdicts` into `debug.json["verification_coverage"]`
+  (graded/executed/passed/rejected/skipped) and a headline UI banner
+  ("executed X/Y tests, Z passed, …").
+- **Polish**: added `LICENSE` (MIT), `.github/workflows/tests.yml` (pytest on 3.10–3.12),
+  real README badges (CI + License linked), a "How it verifies itself" README section (with the
+  honest limitation), `.streamlit/config.toml`, and a README **Deploy** section (Streamlit Community
+  Cloud + BYO-key; Vercel explicitly ruled out for Streamlit).
+- **Tests**: +5 (correctness flows into rating; self-contained prompt; verification rollup). Suite
+  **136 passing**. CI badge URL points at `AadiPathak23/distillery` — goes green once the repo is
+  renamed + pushed.
+
 ## 2026-07-09 — Rebrand + BYO-key + correctness gate
 
 - **Renamed the project `finetune_agent` → `distillery`** (package dir `src/distillery/`,

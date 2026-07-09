@@ -577,26 +577,35 @@ STRICT REQUIREMENTS - Each answer MUST include:
    - @pytest.mark.parametrize for data-driven tests
    - pytest.raises for exception testing
    - @pytest.fixture or fixture parameters (like request, tmp_path, mocker)
+5. SELF-CONTAINED and RUNNABLE: define the implementation under test (the class or
+   function being tested) IN THE SAME code block. Do NOT import from project/external
+   modules — only the Python standard library and pytest are allowed. The block must
+   pass when run directly with `pytest`, with assertions that match the implementation.
 
-Example structure:
+Example structure (note: the implementation is defined in the same block, so it runs as-is):
 ```python
 import pytest
 
-@pytest.fixture
-def sample_fixture():
-    return SomeClass()
+class Calculator:
+    def double(self, x):
+        if x < 0:
+            raise ValueError("Invalid input")
+        return x * 2
 
-class TestFeature:
-    @pytest.mark.parametrize("input,expected", [(1, 2), (3, 6)])
-    def test_calculation(self, sample_fixture, input, expected):
-        result = sample_fixture.calculate(input)
+@pytest.fixture
+def calc():
+    return Calculator()
+
+class TestCalculator:
+    @pytest.mark.parametrize("value,expected", [(1, 2), (3, 6)])
+    def test_double(self, calc, value, expected):
+        result = calc.double(value)
         assert result == expected
         assert isinstance(result, int)
-    
-    def test_error_handling(self, sample_fixture):
+
+    def test_error_handling(self, calc):
         with pytest.raises(ValueError, match="Invalid input"):
-            sample_fixture.calculate(-1)
-        assert sample_fixture.error_count > 0
+            calc.double(-1)
 ```
 
 Return JSON:
@@ -604,7 +613,7 @@ Return JSON:
   "items": [
     {{
       "question": "Question asking for specific pytest tests",
-      "answer": "Explanation followed by pytest code meeting ALL requirements above",
+      "answer": "Brief explanation followed by SELF-CONTAINED pytest code (implementation + test) meeting ALL requirements above",
       "metadata": {{
         "difficulty": "easy|medium|hard",
         "intent_label": "{intent.label}",
@@ -615,7 +624,8 @@ Return JSON:
   ]
 }}
 
-Generate exactly {count} items. EVERY answer MUST include valid pytest code meeting ALL requirements."""
+Generate exactly {count} items. EVERY answer MUST include valid, SELF-CONTAINED pytest code
+(implementation + test in one block) that runs as-is — meeting ALL requirements above."""
     
     def _generate_id(
         self, 

@@ -3,9 +3,8 @@
 A production-oriented agentic AI system for generating, critiquing, and evaluating LLM fine-tuning datasets.
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-green)
-![Tests Passing](https://img.shields.io/badge/Tests-Passing-brightgreen)
-![Status: Active](https://img.shields.io/badge/Status-Active-blue)
+[![tests](https://github.com/AadiPathak23/distillery/actions/workflows/tests.yml/badge.svg)](https://github.com/AadiPathak23/distillery/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
@@ -47,12 +46,33 @@ action_plan.md  dataset.json   (filter/refill)  evaluation.json
 
 - **Agentic multi-stage pipeline** -- Each stage (plan, generate, critique, evaluate) runs as a discrete agent with clear inputs and outputs.
 - **Strict dataset contracts** -- Enforced per dataset type. `testcase_generation` requires valid pytest code; `bugfixing` requires diagnostic structure. Violations cause automatic rejection.
-- **Automated quality scoring** -- Uniqueness scores combine lexical (50%), structural (30%), and conceptual (20%) metrics into a single 0-100 rating.
+- **Execution-based correctness gate** -- For test-case datasets, generated pytest is statically analyzed (undefined names, parametrize/signature mismatches) and *actually executed* in a sandboxed subprocess. Tests that fail are rejected and regenerated — not shipped.
+- **Correctness scoring** -- Beyond diversity, an LLM-judge rates each pair on faithfulness and usefulness; that score is folded into the overall rating so the headline number reflects correctness, not just variety.
+- **Bring-your-own-key** -- Paste an OpenAI / Groq / OpenAI-compatible key in the UI (session-only, never written to disk), or run fully offline with Ollama.
 - **Intent-based generation** -- The generator proposes intents per type (e.g., `error_diagnosis`, `fix_implementation`, `prevention`) and distributes items across them for coverage.
 - **Refill loop** -- Rejected items trigger re-generation. The loop runs up to a configurable number of iterations to meet the requested item count.
-- **Debug telemetry** -- Every run writes `debug.json` with pre-critique counts, rejection reasons, sample rejected items, and refill iteration counts.
-- **Local LLM support** -- Full Ollama integration for running the entire pipeline against local models without external API calls.
+- **Debug telemetry** -- Every run writes `debug.json` with pre-critique counts, rejection reasons, sample rejected items, refill iterations, and verification-coverage stats.
 - **Multiple export formats** -- Outputs Q&A, Alpaca-style instruction, OpenAI chat JSONL, and a curated golden set for evaluation.
+
+---
+
+## How it verifies itself
+
+Most synthetic-data tools trust the model's output. Distillery doesn't. For `testcase_generation`,
+every generated test runs through a layered gate before it can enter the dataset:
+
+1. **Syntax** — the code must parse.
+2. **Parametrize/signature consistency** — `@pytest.mark.parametrize` argument names must exist in the test signature.
+3. **Static analysis** — pyflakes rejects undefined names and missing imports.
+4. **Execution** — self-contained tests are run under `pytest` in a sandboxed subprocess; failures are rejected.
+
+Tests that can't be run fairly (they depend on an external module) are *skipped, not passed* — the pipeline never claims to have verified something it didn't. Each run reports a coverage line such as *"executed 9/10 generated tests, 8 passed, 1 rejected as broken."*
+
+**Honest by design:** the resolved provider/model is printed before generation (a loud warning if it falls back to `mock`), and a run that filters everything raises an error with counts and reasons rather than silently writing an empty dataset.
+
+> **Known limitation:** the execution gate only validates self-contained tests, and the correctness score is an LLM-judge (not ground truth). These are surfaced in telemetry rather than hidden.
+
+<!-- SCREENSHOTS: add UI screenshots / a run GIF here before publishing -->
 
 ---
 
@@ -147,6 +167,25 @@ distillery/
 
 ---
 
+## Deploy
+
+The Streamlit app deploys to **[Streamlit Community Cloud](https://streamlit.io/cloud)** with no extra
+config — it installs directly from `pyproject.toml`:
+
+1. Push this repo to GitHub.
+2. On Streamlit Community Cloud, create an app pointing at `src/distillery/ui/app.py`.
+3. In the app, pick the **OpenAI-compatible** provider and paste your own API key (OpenAI or Groq).
+   The key lives only in your session and is never written to disk or the repo.
+
+Notes:
+- The hosted app uses **bring-your-own-key** — there is no shared/server key to manage.
+- **Ollama is local-only** (it needs a model server on your machine), so the local model path is for
+  cloning and running the repo yourself, not the hosted demo.
+- **Vercel is not suitable** for this app — it targets serverless/Next.js, whereas Streamlit needs a
+  long-running server. Use Streamlit Community Cloud, Render, or Railway.
+
+---
+
 ## Roadmap
 
 - GitHub repository ingestion for context-aware dataset generation
@@ -158,4 +197,4 @@ distillery/
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.

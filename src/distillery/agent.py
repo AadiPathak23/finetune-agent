@@ -226,7 +226,34 @@ class FinetuneAgent:
             
             debug_info["top_rejection_reasons"][dtype] = reasons
             debug_info["sample_rejections"][dtype] = samples
-    
+
+    def _summarize_verification(self, debug_info: dict[str, Any]) -> None:
+        """Roll up the correctness gate's per-item verdicts into a coverage summary.
+
+        Turns the gate into a headline stat: of the code items graded, how many were
+        actually executed, how many passed, how many were rejected as broken, and how
+        many were skipped (couldn't be run because of external deps). Only populated
+        when the gate ran (validate_generated_code enabled).
+        """
+        from distillery.critic_execution import Verdict
+
+        code_verdicts = getattr(self.critic, "_code_verdicts", {})
+        for dtype, verdicts in code_verdicts.items():
+            if not verdicts:
+                continue
+            values = list(verdicts.values())
+            passed = sum(1 for v in values if v.verdict == Verdict.OK)
+            exec_fail = sum(1 for v in values if v.verdict == Verdict.EXEC_FAIL)
+            rejected = sum(1 for v in values if v.is_reject)
+            skipped = sum(1 for v in values if v.verdict == Verdict.SKIPPED_EXTERNAL_DEPS)
+            debug_info["verification_coverage"][dtype] = {
+                "graded": len(values),
+                "executed": passed + exec_fail,  # actually run under pytest
+                "passed": passed,
+                "rejected": rejected,
+                "skipped_external_deps": skipped,
+            }
+
     def run(
         self,
         prompt: str,
@@ -278,6 +305,7 @@ class FinetuneAgent:
             "top_rejection_reasons": {},
             "sample_rejections": {},  # { dtype: { reason: { question, answer_snippet } } }
             "first_item_answer_snippet": {},  # { dtype: snippet }
+            "verification_coverage": {},  # { dtype: {graded, executed, passed, rejected, skipped_external_deps} }
             "errors": [],
         }
         
@@ -399,6 +427,10 @@ class FinetuneAgent:
         for ds in filtered_dataset.datasets:
             debug_info["final_count"][ds.type] = len(ds.items)
             debug_info["accepted_count"][ds.type] = len(ds.items)
+
+        # Roll up the correctness gate's per-item verdicts into a coverage summary
+        # (only populated when validate_generated_code was enabled).
+        self._summarize_verification(debug_info)
         
         # Check final counts and add warnings
         for ds in filtered_dataset.datasets:

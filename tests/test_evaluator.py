@@ -428,6 +428,66 @@ class TestV2EvaluationOutput:
         )
         
         result = evaluator.evaluate(dataset)
-        
+
         assert hasattr(result, "warnings")
         assert isinstance(result.warnings, list)
+
+
+class _StubJudgeLLM:
+    """LLM stub whose correctness judgement is controllable via a fixed score."""
+
+    def __init__(self, score: float):
+        self._score = score
+
+    @property
+    def provider_name(self) -> str:
+        return "stub"
+
+    def generate(self, prompt: str, max_tokens: int = 2000) -> str:
+        return "ok"
+
+    def generate_json(self, prompt: str, schema=None, max_tokens: int = 4000) -> dict:
+        # Only the correctness prompt asks for "faithfulness"; everything else
+        # (conceptual, etc.) gets a neutral diversity score.
+        if "faithfulness" in prompt:
+            return {
+                "items": [{"index": 0, "correctness_score": self._score, "issue": None}],
+                "dataset_avg": self._score,
+            }
+        return {"conceptual_diversity_score": 70}
+
+
+class TestCorrectnessScoring:
+    """Tests for the LLM-judge correctness score."""
+
+    def _dataset(self):
+        return DatasetOutput(
+            project_summary="s",
+            datasets=[
+                Dataset(
+                    type="testcase_generation",
+                    items=[QAPair(question="Write a pytest test", answer="```python\ndef test_x():\n    assert 1 == 1\n    assert 2 == 2\n```", metadata={})],
+                )
+            ],
+        )
+
+    def test_correctness_score_returned_and_in_range(self):
+        ev = Evaluator(llm_client=_StubJudgeLLM(85))
+        avg, per_item = ev.calculate_correctness_score(self._dataset().datasets[0].items)
+        assert 0 <= avg <= 100
+        assert avg == 85
+        assert per_item == {0: 85.0}
+
+    def test_correctness_flows_into_overall_rating(self):
+        high = Evaluator(llm_client=_StubJudgeLLM(100)).evaluate(self._dataset())
+        low = Evaluator(llm_client=_StubJudgeLLM(0)).evaluate(self._dataset())
+        # Same dataset, only the correctness judgement differs -> overall must move.
+        assert high.overall_rating > low.overall_rating
+        assert high.correctness_score == 100
+        assert low.correctness_score == 0
+        assert high.dataset_evaluations[0].correctness_score == 100
+
+    def test_correctness_falls_back_neutral_on_llm_failure(self, evaluator):
+        # The default mock LLM returns no judge JSON -> conservative neutral, no crash.
+        avg, per_item = evaluator.calculate_correctness_score(self._dataset().datasets[0].items)
+        assert 0 <= avg <= 100
