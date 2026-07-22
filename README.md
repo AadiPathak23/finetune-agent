@@ -81,7 +81,7 @@ Tests that can't be run fairly (they depend on an external module) are *skipped,
 ### Install
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/AadiPathak23/distillery.git
 cd distillery
 pip install -e ".[dev]"
 ```
