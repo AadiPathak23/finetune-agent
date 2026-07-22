@@ -299,8 +299,11 @@ Be objective and constructive."""
 
         # Sample to bound tokens (mirrors the conceptual-score sampling idiom).
         sample = items[: min(10, len(items))]
+        # Answers embed a full self-contained impl+test block (~1k chars); a
+        # short window truncates mid-code and the judge unfairly grades an
+        # incomplete snippet as broken. Give it enough to see the whole test.
         lines = [
-            f"[{i}] Q: {it.question[:200]}\n    A: {it.answer[:400]}"
+            f"[{i}] Q: {it.question[:200]}\n    A: {it.answer[:1500]}"
             for i, it in enumerate(sample)
         ]
 
