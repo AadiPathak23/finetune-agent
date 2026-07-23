@@ -4,6 +4,7 @@ Run with: streamlit run src/distillery/ui/app.py
 """
 
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -26,10 +27,375 @@ from distillery.schemas import DatasetConstraints, ModelFamily, UserConstraints
 
 st.set_page_config(
     page_title="Distillery",
-    page_icon="🔧",
+    page_icon="⚗️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+# =============================================================================
+# Visual Design System (custom CSS)
+# =============================================================================
+
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;450;500;600;700&display=swap');
+
+:root {
+  --brand: #cde04a;
+  --brand-2: #8faa2a;
+  --brand-soft: #e6efac;
+  --glow: rgba(205, 224, 74, 0.12);
+  --bg: #0a0b0a;
+  --panel: #101210;
+  --card: rgba(255, 255, 255, 0.035);
+  --card-hover: rgba(205, 224, 74, 0.07);
+  --field: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #eef1ea;
+  --text-dim: #969b8e;
+}
+
+/* ============ Base / typography ============ */
+html, body, .stApp, [class*="css"], input, textarea, button, select, [data-baseweb] {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif !important; letter-spacing: -0.02em; color: var(--text); }
+.stApp { color: var(--text); }
+p, span, label, li, .stMarkdown { color: var(--text); }
+
+/* Flat background — no ambient glow (sharp, minimalist) */
+.stApp {
+  background: var(--bg);
+}
+
+/* ============ Strip default Streamlit chrome ============ */
+[data-testid="stDecoration"] { display: none; }
+[data-testid="stToolbar"], [data-testid="stStatusWidget"] { display: none; }
+[data-testid="stHeader"] { background: transparent; height: 0; }
+#MainMenu, footer { display: none; }
+
+/* Tighten the giant default top padding + constrain width */
+.block-container, [data-testid="stMainBlockContainer"] {
+  padding-top: 2.1rem !important; padding-bottom: 3rem !important; max-width: 1300px;
+}
+
+/* ============ Hero (demoted: single small positioning line) ============ */
+.distillery-hero { padding: 2px 0 16px; display: flex; align-items: center; gap: 9px; }
+.distillery-hero .kicker {
+  font-size: 0.9rem; font-weight: 500; letter-spacing: 0.01em; color: var(--text-dim);
+}
+.distillery-hero .kicker b { color: var(--brand-soft); font-weight: 600; }
+.distillery-hero .hmark { display: inline-flex; color: var(--brand-soft); }
+.distillery-hero .hmark svg { width: 18px; height: 18px; }
+
+/* ============ Unified eyebrow (bordered uppercase pill, used everywhere) === */
+.section-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--brand-soft);
+  border: 1px solid var(--border); background: rgba(205,224,74,0.08);
+  padding: 5px 11px; border-radius: 999px; margin: 6px 0 2px;
+}
+.section-eyebrow svg { width: 14px; height: 14px; }
+
+/* ============ Section headings ============ */
+[data-testid="stHeading"] h2 {
+  font-size: 0.82rem !important; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.11em; color: var(--brand-soft);
+  padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+[data-testid="stHeading"] h3 { font-size: 1.12rem !important; font-weight: 600; }
+
+/* ============ Sidebar ============ */
+section[data-testid="stSidebar"] {
+  width: 408px !important;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+section[data-testid="stSidebar"] > div { padding-top: 0; }
+[data-testid="stSidebarUserContent"] { padding: 1.15rem 1.25rem 2rem; }
+/* Tighten vertical rhythm between sidebar widgets */
+[data-testid="stSidebarUserContent"] [data-testid="stVerticalBlock"] { gap: 0.7rem; }
+/* Sidebar brand lockup */
+.sidebar-brand {
+  display: flex; align-items: center; gap: 11px;
+  padding: 2px 2px 15px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-brand .mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px; color: var(--brand);
+  background: rgba(205,224,74,0.08);
+  border: 1px solid var(--border-strong);
+}
+.sidebar-brand .mark svg { width: 22px; height: 22px; }
+.sidebar-brand .name {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-size: 1.22rem; letter-spacing: -0.02em; line-height: 1.1;
+  color: var(--text);
+}
+.sidebar-brand .sub {
+  font-size: 0.72rem; color: var(--text-dim); margin-top: 1px; letter-spacing: 0.01em;
+}
+/* Sidebar section headers -> tidy control-panel labels */
+section[data-testid="stSidebar"] [data-testid="stHeading"] h2 {
+  margin-top: 10px !important;
+}
+
+/* ============ Cards / feature grid (empty state) ============ */
+.empty-wrap { max-width: 940px; margin: 6px 0 0; }
+.empty-panel {
+  border: 1px solid var(--border); border-radius: 18px;
+  background: var(--card);
+  padding: 34px 34px 36px;
+}
+.empty-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--brand-soft);
+  border: 1px solid var(--border); background: rgba(205,224,74,0.08);
+  padding: 5px 11px; border-radius: 999px;
+}
+.empty-eyebrow svg { width: 13px; height: 13px; }
+.empty-title {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-size: 1.9rem; letter-spacing: -0.02em; line-height: 1.15;
+  margin: 16px 0 8px; color: var(--text);
+}
+.empty-title .accent { color: var(--brand); }
+.empty-sub { color: var(--text-dim); font-size: 1.02rem; line-height: 1.55; max-width: 620px; }
+
+.feature-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 30px;
+}
+.feature-card {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 16px;
+  background: rgba(255,255,255,0.02);
+  padding: 20px 18px 18px;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.feature-card:hover {
+  transform: translateY(-2px); border-color: var(--border-strong);
+  background: var(--card-hover);
+}
+.feature-card .step {
+  position: absolute; top: 14px; right: 15px;
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 0.92rem;
+  color: var(--brand-soft); opacity: 0.85;
+}
+.feature-card .ficon {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--brand);
+  background: rgba(205,224,74,0.07);
+  border: 1px solid var(--border-strong);
+  margin-bottom: 15px;
+}
+.feature-card .ficon svg { width: 22px; height: 22px; }
+.feature-card .ftitle {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.02rem;
+  color: var(--text); margin-bottom: 6px;
+}
+.feature-card .ftext { color: var(--text-dim); font-size: 0.83rem; line-height: 1.5; }
+.empty-cta {
+  display: flex; align-items: center; gap: 9px; margin-top: 28px;
+  padding-top: 20px; border-top: 1px solid var(--border);
+  font-size: 0.92rem; color: var(--text-dim);
+}
+.empty-cta svg { color: var(--brand-soft); flex-shrink: 0; }
+.empty-cta b { color: var(--brand-soft); font-weight: 600; }
+@media (max-width: 1150px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ============ Inputs (baseweb) ============ */
+.stTextInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"],
+.stNumberInput div[data-baseweb="input"],
+.stSelectbox div[data-baseweb="select"] > div,
+.stMultiSelect div[data-baseweb="select"] > div {
+  background: var(--field) !important; border: 1px solid var(--border) !important;
+  border-radius: 10px !important; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.stTextInput input, .stTextArea textarea, .stNumberInput input { color: var(--text) !important; }
+.stTextInput div[data-baseweb="input"]:focus-within, .stTextArea div[data-baseweb="textarea"]:focus-within,
+.stNumberInput div[data-baseweb="input"]:focus-within,
+.stSelectbox div[data-baseweb="select"]:focus-within > div,
+.stMultiSelect div[data-baseweb="select"]:focus-within > div {
+  border-color: var(--brand) !important; box-shadow: 0 0 0 3px var(--glow) !important;
+}
+/* Selectbox / multiselect popover + tags */
+[data-baseweb="popover"] [role="listbox"] {
+  background: var(--panel) !important; border: 1px solid var(--border-strong) !important; border-radius: 12px !important;
+}
+[data-baseweb="tag"] {
+  background: rgba(205,224,74,0.12) !important; border: 1px solid rgba(205,224,74,0.30) !important;
+  border-radius: 7px !important; color: var(--brand-soft) !important;
+}
+[data-baseweb="tag"] svg { fill: var(--brand-soft) !important; }
+
+/* Slider */
+.stSlider [data-baseweb="slider"] [role="slider"] { background: var(--brand) !important; border-color: var(--brand) !important; }
+.stSlider [data-baseweb="slider"] > div > div > div { background: var(--brand) !important; }
+/* Value is inlined into the label, so hide the floating bare thumb value */
+.stSlider [data-testid="stSliderThumbValue"],
+.stSlider [data-testid="stThumbValue"] { display: none !important; }
+
+/* ============ Buttons ============ */
+.stButton > button, .stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {
+  border-radius: 11px; border: 1px solid var(--border); font-weight: 600;
+  background: var(--field); color: var(--text);
+  transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease, background .14s ease;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color: var(--brand); background: var(--card-hover); transform: translateY(-1px);
+}
+.stButton > button[kind="primary"], button[data-testid="stBaseButton-primary"],
+div[data-testid="stFormSubmitButton"] > button {
+  background: var(--brand) !important;
+  border: none !important; color: #0a0b0a !important;
+  font-weight: 700 !important; font-size: 1.0rem; padding: 0.55rem 1rem;
+}
+.stButton > button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
+  filter: brightness(1.06); transform: translateY(-1px);
+}
+
+/* ============ Metric cards ============ */
+[data-testid="stMetric"] {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 15px 17px;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+[data-testid="stMetric"]:hover {
+  transform: translateY(-2px); border-color: var(--border-strong); background: var(--card-hover);
+}
+[data-testid="stMetricValue"] { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #fff; }
+[data-testid="stMetricLabel"] p { opacity: .65; text-transform: uppercase; font-size: .68rem; letter-spacing: .07em; font-weight: 600; }
+
+/* ============ Alerts (unified lime/neutral — no default Streamlit blue) === */
+[data-testid="stAlert"] {
+  border-radius: 12px !important;
+  border: 1px solid rgba(205,224,74,0.32) !important;
+  background: var(--card) !important;
+  backdrop-filter: blur(6px);
+}
+[data-testid="stAlert"] > div,
+[data-testid="stAlertContainer"],
+[data-testid="stAlert"] [data-baseweb="notification"] {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlert"] li,
+[data-testid="stAlert"] div { color: var(--text) !important; }
+[data-testid="stAlert"] svg { fill: var(--brand-soft) !important; color: var(--brand-soft) !important; }
+[data-testid="stAlert"] code { color: #e6efac !important; }
+/* Semantic left accent — keeps success/error legible while staying on-system */
+[data-testid="stAlert"]:has(svg) { border-left-width: 3px !important; }
+
+/* ============ Expanders ============ */
+[data-testid="stExpander"] {
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card); overflow: hidden;
+}
+[data-testid="stExpander"] summary { padding: 12px 16px; font-weight: 600; }
+[data-testid="stExpander"] summary:hover { color: var(--brand-soft); }
+
+/* ============ Tabs ============ */
+.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
+.stTabs [data-baseweb="tab"] {
+  font-weight: 600; border-radius: 10px 10px 0 0; padding: 9px 18px; color: var(--text-dim);
+}
+.stTabs [data-baseweb="tab"]:hover { color: var(--text); background: var(--card); }
+.stTabs [aria-selected="true"] { color: #fff !important; background: var(--card); }
+.stTabs [data-baseweb="tab-highlight"] { background: var(--brand) !important; height: 2.5px; }
+
+/* ============ Code ============ */
+code { background: rgba(205, 224, 74, 0.14) !important; color: #e6efac !important; border-radius: 6px; padding: 1px 6px; font-size: 0.86em; }
+[data-testid="stCode"], pre { border: 1px solid var(--border) !important; border-radius: 12px !important; }
+
+/* ============ DataFrame / tables ============ */
+[data-testid="stDataFrame"], [data-testid="stTable"] { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+/* ============ Captions / dividers ============ */
+[data-testid="stCaptionContainer"], small { color: var(--text-dim) !important; }
+hr { border-color: var(--border) !important; margin: 1rem 0 !important; }
+
+/* ============ Progress / spinner accent ============ */
+.stProgress > div > div > div { background: linear-gradient(90deg, var(--brand), var(--brand-2)) !important; }
+[data-testid="stSpinner"] i { border-top-color: var(--brand) !important; }
+
+/* ============ Scrollbar ============ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(205, 224, 74, 0.35); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(205, 224, 74, 0.55); }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Icon set — one cohesive inline-SVG line-icon system (1.5px stroke,
+# currentColor). No full-color emoji in any HTML surface.
+# =============================================================================
+
+def _svg(body: str, size: int = 24) -> str:
+    return (
+        f'<svg viewBox="0 0 24 24" width="{size}" height="{size}" fill="none" '
+        f'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" '
+        f'stroke-linejoin="round" aria-hidden="true">{body}</svg>'
+    )
+
+
+ICONS = {
+    # Brand mark — laboratory flask (distillation)
+    "flask": _svg(
+        '<path d="M9 2h6"/>'
+        '<path d="M9.5 2v6.2L4.7 16a3 3 0 0 0 2.6 4.6h9.4a3 3 0 0 0 2.6-4.6L14.5 8.2V2"/>'
+        '<path d="M7.4 14h9.2"/>'
+    ),
+    # Plan — compass
+    "compass": _svg(
+        '<circle cx="12" cy="12" r="9"/>'
+        '<path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/>'
+    ),
+    # Generate — gear
+    "gear": _svg(
+        '<circle cx="12" cy="12" r="3.2"/>'
+        '<path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3'
+        'M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4L5.3 5.3"/>'
+    ),
+    # Verify — shield with check
+    "shield": _svg(
+        '<path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z"/>'
+        '<path d="M9 12l2.2 2.2L15.2 10"/>'
+    ),
+    # Evaluate — bar chart
+    "chart": _svg(
+        '<path d="M3.5 20.5h17"/>'
+        '<rect x="5.5" y="11" width="3.2" height="7" rx="1"/>'
+        '<rect x="10.4" y="6" width="3.2" height="12" rx="1"/>'
+        '<rect x="15.3" y="13" width="3.2" height="5" rx="1"/>'
+    ),
+    # LLM Provider — processor / chip
+    "cpu": _svg(
+        '<rect x="7" y="7" width="10" height="10" rx="2"/>'
+        '<path d="M9.5 2v3M14.5 2v3M9.5 19v3M14.5 19v3'
+        'M2 9.5h3M2 14.5h3M19 9.5h3M19 14.5h3"/>'
+    ),
+    # Configuration — sliders
+    "sliders": _svg(
+        '<path d="M5 4v5M5 13v7M12 4v9M12 17v3M19 4v3M19 11v9"/>'
+        '<circle cx="5" cy="11" r="2"/><circle cx="12" cy="15" r="2"/>'
+        '<circle cx="19" cy="9" r="2"/>'
+    ),
+    # Small diamond bullet for the pipeline eyebrow
+    "diamond": _svg('<path d="M12 3.5l8.5 8.5-8.5 8.5L3.5 12z"/>', size=13),
+    # Arrow (CTA)
+    "arrow": _svg('<path d="M11 5l7 7-7 7"/><path d="M18 12H4"/>', size=15),
+}
 
 
 # =============================================================================
@@ -66,6 +432,15 @@ def init_session_state():
         st.session_state.openai_model = "gpt-4o-mini"
     if "openai_status" not in st.session_state:
         st.session_state.openai_status = None
+    # Groq (cloud, OpenAI-compatible) — session-only key, never written to disk.
+    if "groq_api_key" not in st.session_state:
+        # Never pre-fill the env key into a UI field (it would be revealable).
+        # An env key is used silently at runtime via the client factory instead.
+        st.session_state.groq_api_key = ""
+    if "groq_model" not in st.session_state:
+        st.session_state.groq_model = "llama-3.3-70b-versatile"
+    if "groq_status" not in st.session_state:
+        st.session_state.groq_status = None
 
 
 init_session_state()
@@ -110,6 +485,8 @@ def get_llm_client_for_provider(
     openai_api_key: str = None,
     openai_base_url: str = None,
     openai_model: str = None,
+    groq_api_key: str = None,
+    groq_model: str = None,
 ):
     """Get LLM client based on selected provider."""
     from distillery.llm import get_llm_client
@@ -119,6 +496,14 @@ def get_llm_client_for_provider(
             provider="ollama",
             host=ollama_host or st.session_state.ollama_host,
             model=ollama_model or st.session_state.ollama_model,
+        )
+    elif provider == "groq":
+        # Groq is OpenAI-compatible; reuse the OpenAI client with Groq's base URL.
+        return get_llm_client(
+            provider="openai",
+            api_key=(groq_api_key or st.session_state.groq_api_key) or None,
+            base_url="https://api.groq.com/openai/v1",
+            model=(groq_model or st.session_state.groq_model) or None,
         )
     elif provider == "openai":
         return get_llm_client(
@@ -135,33 +520,42 @@ def get_llm_client_for_provider(
 # Header
 # =============================================================================
 
-st.title("🔧 Distillery")
-st.markdown("**Agentic AI for finetuning engineering**")
-st.markdown("---")
+st.markdown(
+    f'<div class="distillery-hero">'
+    f'<span class="hmark">{ICONS["flask"]}</span>'
+    f'<span class="kicker">Agentic <b>fine-tuning dataset</b> generator</span>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
 
 # =============================================================================
-# Layout: Two Columns
+# Sidebar: All configuration controls (control-panel layout)
 # =============================================================================
 
-left_col, right_col = st.columns([1, 2])
-
-
-# =============================================================================
-# Left Column: Inputs
-# =============================================================================
-
-with left_col:
+with st.sidebar:
+    st.markdown(
+        f'<div class="sidebar-brand">'
+        f'<div class="mark">{ICONS["flask"]}</div>'
+        f'<div><div class="name">Distillery</div>'
+        f'<div class="sub">Dataset control panel</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     # =========================================================================
     # LLM Provider Configuration
     # =========================================================================
-    st.header("🤖 LLM Provider")
+    st.markdown(
+        f'<div class="section-eyebrow">{ICONS["cpu"]}<span>LLM Provider</span></div>',
+        unsafe_allow_html=True,
+    )
     
-    provider_options = ["mock", "openai", "ollama"]
+    provider_options = ["groq", "openai", "ollama", "mock"]
     provider_labels = {
-        "mock": "Mock (Testing)",
-        "openai": "OpenAI API",
+        "groq": "Groq (Cloud · free key)",
+        "openai": "OpenAI-compatible",
         "ollama": "Ollama (Local)",
+        "mock": "Mock (Testing)",
     }
     
     selected_provider = st.selectbox(
@@ -210,6 +604,62 @@ with left_col:
                     3. Pull model: `ollama pull qwen2.5-coder`
                     """)
     
+    elif selected_provider == "groq":
+        with st.expander("⚡ Groq Settings", expanded=True):
+            # If a key is configured in the environment, use it silently — never
+            # render it in a field (a password input is still revealable, which
+            # would expose the owner's key to anyone using the app).
+            env_key_present = bool(os.getenv("GROQ_API_KEY"))
+            if env_key_present:
+                st.success(
+                    "🔒 Using the Groq API key from the environment — "
+                    "hidden and never displayed."
+                )
+            else:
+                st.caption(
+                    "Free, fast, OpenAI-compatible cloud inference — recommended. "
+                    "[Get a free API key ↗](https://console.groq.com/keys)"
+                )
+                st.session_state.groq_api_key = st.text_input(
+                    "Groq API key",
+                    value=st.session_state.groq_api_key,
+                    type="password",
+                    placeholder="gsk_...",
+                    help="Kept in this session only — never written to disk.",
+                )
+            groq_models = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b",
+            ]
+            cur_model = st.session_state.groq_model
+            model_options = (
+                groq_models if cur_model in groq_models else [cur_model] + groq_models
+            )
+            st.session_state.groq_model = st.selectbox(
+                "Model",
+                options=model_options,
+                index=model_options.index(cur_model),
+                help="70b-versatile = best quality; 8b-instant = fastest with the "
+                "highest free-tier rate limits.",
+            )
+
+            if st.button("🔄 Test Connection", use_container_width=True):
+                with st.spinner("Testing Groq connection..."):
+                    st.session_state.groq_status = check_openai_connection(
+                        st.session_state.groq_api_key or os.getenv("GROQ_API_KEY", ""),
+                        "https://api.groq.com/openai/v1",
+                        st.session_state.groq_model,
+                    )
+
+            if st.session_state.groq_status is not None:
+                ok, message = st.session_state.groq_status
+                (st.success if ok else st.error)(f"{'✅' if ok else '❌'} {message}")
+
+            if not env_key_present and not st.session_state.groq_api_key:
+                st.caption("No key set yet — generation would fall back to mock.")
+
     elif selected_provider == "openai":
         with st.expander("🔑 OpenAI-compatible Settings", expanded=True):
             # Presets pre-fill base URL + a sensible default model. "Custom"
@@ -265,14 +715,17 @@ with left_col:
                 st.caption("No key set yet — generation would fall back to mock.")
 
     elif selected_provider == "mock":
-        st.info("ℹ️ Using mock LLM for testing (no API calls)")
+        st.info("Using mock LLM for testing — no API calls are made.")
     
     st.markdown("---")
     
     # =========================================================================
     # Dataset Configuration
     # =========================================================================
-    st.header("📊 Configuration")
+    st.markdown(
+        f'<div class="section-eyebrow">{ICONS["sliders"]}<span>Configuration</span></div>',
+        unsafe_allow_html=True,
+    )
     
     # Main prompt
     prompt = st.text_area(
@@ -298,13 +751,15 @@ with left_col:
         help="Select which types of Q&A pairs to generate",
     )
     
-    # Q&A count
+    # Q&A count — current value inlined into the label (no floating bare number)
+    _qa_current = st.session_state.get("qa_per_type_slider", 10)
     qa_per_type = st.slider(
-        "Q&A pairs per dataset type",
+        f"Q&A pairs per type — {_qa_current}",
         min_value=1,
         max_value=100,
         value=10,
         step=1,
+        key="qa_per_type_slider",
         help="Number of question-answer pairs to generate for each dataset type",
     )
     
@@ -459,6 +914,8 @@ with left_col:
                 openai_api_key=st.session_state.openai_api_key if selected_provider == "openai" else None,
                 openai_base_url=st.session_state.openai_base_url if selected_provider == "openai" else None,
                 openai_model=st.session_state.openai_model if selected_provider == "openai" else None,
+                groq_api_key=st.session_state.groq_api_key if selected_provider == "groq" else None,
+                groq_model=st.session_state.groq_model if selected_provider == "groq" else None,
             )
         except Exception as e:
             st.error(f"Failed to initialize LLM client: {e}")
@@ -543,45 +1000,42 @@ with left_col:
 
 
 # =============================================================================
-# Right Column: Outputs
+# Main canvas: Outputs (empty state or results dashboard)
 # =============================================================================
 
-with right_col:
-    st.header("Results")
-    
+with st.container():
     if st.session_state.results is None:
-        st.info("Configure your dataset and click **Run Agent** to generate results.")
-        
-        # Show example output structure
-        with st.expander("What will be generated?"):
-            st.markdown("""
-            The agent will generate:
-            
-            1. **Action Plan** — A professional engineering document with:
-               - Target model analysis
-               - Dataset design rationale
-               - Risk assessment
-               - Implementation roadmap
-            
-            2. **Dataset** — Q&A pairs in JSON format with metadata:
-               - Question and answer text
-               - Difficulty level
-               - Intent labels
-               - Estimated training value
-            
-            3. **Critique** — Self-review identifying:
-               - Near-duplicate questions
-               - Low-quality items
-               - Improvement suggestions
-            
-            4. **Evaluation** — Quality scores including:
-               - Uniqueness score (lexical + structural + conceptual)
-               - Overall rating
-               - Health metrics
-               - Warnings
-            """)
-    
+        # ---- Marketed empty state: pipeline explainer + feature cards ----
+        # NOTE: kept as one line-free block so Streamlit's markdown parser does
+        # not treat indented lines as a code block.
+        empty_state_html = (
+            '<div class="empty-wrap"><div class="empty-panel">'
+            f'<span class="empty-eyebrow">{ICONS["diamond"]}<span>The pipeline</span></span>'
+            '<div class="empty-title">Four agents, one <span class="accent">verified</span> dataset.</div>'
+            '<div class="empty-sub">Four specialized agents turn one prompt into a dataset that '
+            'proves itself by running the tests it writes.</div>'
+            '<div class="feature-grid">'
+            f'<div class="feature-card"><span class="step">01</span><div class="ficon">{ICONS["compass"]}</div>'
+            '<div class="ftitle">Plan</div><div class="ftext">The Planner drafts a spec covering target '
+            'model, dataset design and risks.</div></div>'
+            f'<div class="feature-card"><span class="step">02</span><div class="ficon">{ICONS["gear"]}</div>'
+            '<div class="ftitle">Generate</div><div class="ftext">The Generator produces diverse Q&amp;A '
+            'pairs with difficulty and intent labels.</div></div>'
+            f'<div class="feature-card"><span class="step">03</span><div class="ficon">{ICONS["shield"]}</div>'
+            '<div class="ftitle">Verify</div><div class="ftext">The Critic flags weak pairs and runs the '
+            'generated tests under pytest.</div></div>'
+            f'<div class="feature-card"><span class="step">04</span><div class="ficon">{ICONS["chart"]}</div>'
+            '<div class="ftitle">Evaluate</div><div class="ftext">The Evaluator scores uniqueness and '
+            'correctness, then exports clean JSONL.</div></div>'
+            '</div>'
+            f'<div class="empty-cta">{ICONS["arrow"]}<span>Configure a run in the panel on the left, '
+            'then press <b>Run Agent</b>.</span></div>'
+            '</div></div>'
+        )
+        st.markdown(empty_state_html, unsafe_allow_html=True)
+
     else:
+        st.header("Results")
         results = st.session_state.results
         debug_info = results.get("debug_info", {})
         requested_count = results.get("requested_qa_per_type", 0)
@@ -610,10 +1064,50 @@ with right_col:
             passed = sum(s["passed"] for s in vcov.values())
             rejected = sum(s["rejected"] for s in vcov.values())
             skipped = sum(s["skipped_external_deps"] for s in vcov.values())
-            st.success(
-                f"🔬 **Correctness gate ran on {graded} generated tests** — "
-                f"{executed} executed under pytest ({passed} passed), "
-                f"{rejected} rejected as broken, {skipped} skipped (external deps)."
+            skipped_note = (
+                f" · {skipped} skipped (external deps)" if skipped else ""
+            )
+            st.markdown(
+                f"""
+                <div style="
+                  border:1px solid rgba(205,224,74,0.35);
+                  background:linear-gradient(120deg, rgba(205,224,74,0.13), rgba(143,170,42,0.10));
+                  border-radius:16px; padding:16px 18px; margin:6px 0 2px;
+                  display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                  <div style="font-size:1.7rem; line-height:1;">🔬</div>
+                  <div style="flex:1; min-width:190px;">
+                    <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                                font-size:1.04rem; color:#ece7ff;">
+                      Self-verified — the pipeline ran its own tests
+                    </div>
+                    <div style="color:#a9a4c0; font-size:0.86rem; margin-top:3px;">
+                      Correctness gate graded {graded} generated tests under
+                      <code>pytest</code>{skipped_note}.
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:24px; text-align:center;">
+                    <div>
+                      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                                  font-size:1.55rem; color:#cde04a;">{passed}</div>
+                      <div style="font-size:.66rem; letter-spacing:.06em; text-transform:uppercase;
+                                  color:#a9a4c0;">Passed</div>
+                    </div>
+                    <div>
+                      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                                  font-size:1.55rem; color:#e6efac;">{executed}</div>
+                      <div style="font-size:.66rem; letter-spacing:.06em; text-transform:uppercase;
+                                  color:#a9a4c0;">Executed</div>
+                    </div>
+                    <div>
+                      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                                  font-size:1.55rem; color:#f87171;">{rejected}</div>
+                      <div style="font-size:.66rem; letter-spacing:.06em; text-transform:uppercase;
+                                  color:#a9a4c0;">Rejected</div>
+                    </div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         # =====================================================================
@@ -991,9 +1485,17 @@ with right_col:
 # Footer
 # =============================================================================
 
-st.markdown("---")
-footer_text = "Distillery v2.0 | Built for the fine-tuning community"
+footer_text = "Distillery v2.0 · Built for the fine-tuning community"
 if st.session_state.llm_provider == "ollama":
-    footer_text += f" | Ollama: {st.session_state.ollama_model}"
-st.caption(footer_text)
-st.caption("This tool does NOT train models — it generates training datasets.")
+    footer_text += f" · Ollama: {st.session_state.ollama_model}"
+st.markdown(
+    f"""
+    <div style="margin-top:34px; padding-top:18px; border-top:1px solid var(--border);
+                display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+                color:var(--text-dim); font-size:0.8rem;">
+      <span>{footer_text}</span>
+      <span>This tool does <b style="color:#e6efac;">not</b> train models — it generates training datasets.</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
