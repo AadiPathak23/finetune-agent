@@ -439,6 +439,10 @@ def init_session_state():
         st.session_state.groq_api_key = ""
     if "groq_model" not in st.session_state:
         st.session_state.groq_model = "llama-3.3-70b-versatile"
+    # Two-model split: a lighter model judges (critic + evaluator) on its own
+    # per-model rate-limit bucket, so the correctness judge isn't starved.
+    if "groq_aux_model" not in st.session_state:
+        st.session_state.groq_aux_model = "llama-3.1-8b-instant"
     if "groq_status" not in st.session_state:
         st.session_state.groq_status = None
 
@@ -638,12 +642,29 @@ with st.sidebar:
                 groq_models if cur_model in groq_models else [cur_model] + groq_models
             )
             st.session_state.groq_model = st.selectbox(
-                "Model",
+                "Generation model",
                 options=model_options,
                 index=model_options.index(cur_model),
-                help="70b-versatile = best quality; 8b-instant = fastest with the "
-                "highest free-tier rate limits.",
+                help="Used to generate the dataset. 70b-versatile = best quality.",
             )
+            # Two-model split — a separate lighter model does the judging.
+            aux_cur = st.session_state.groq_aux_model
+            aux_options = (
+                groq_models if aux_cur in groq_models else [aux_cur] + groq_models
+            )
+            st.session_state.groq_aux_model = st.selectbox(
+                "Judge / analysis model",
+                options=aux_options,
+                index=aux_options.index(aux_cur),
+                help="Used for critique + scoring (not generation). On Groq this runs "
+                "on a separate per-model rate-limit bucket, so the correctness judge "
+                "isn't starved by the generation model. 8b-instant recommended.",
+            )
+            if st.session_state.groq_aux_model != st.session_state.groq_model:
+                st.caption(
+                    f"⚙️ Generate with **{st.session_state.groq_model}**, "
+                    f"judge with **{st.session_state.groq_aux_model}**."
+                )
 
             if st.button("🔄 Test Connection", use_container_width=True):
                 with st.spinner("Testing Groq connection..."):
@@ -906,6 +927,7 @@ with st.sidebar:
             st.session_state.progress_messages.append(message)
         
         # Get LLM client based on selected provider
+        aux_client = None
         try:
             llm_client = get_llm_client_for_provider(
                 selected_provider,
@@ -917,15 +939,27 @@ with st.sidebar:
                 groq_api_key=st.session_state.groq_api_key if selected_provider == "groq" else None,
                 groq_model=st.session_state.groq_model if selected_provider == "groq" else None,
             )
+            # Two-model split: build a separate lighter client for the judging
+            # stages (critic + evaluator) when the aux model differs.
+            if (
+                selected_provider == "groq"
+                and st.session_state.groq_aux_model != st.session_state.groq_model
+            ):
+                aux_client = get_llm_client_for_provider(
+                    "groq",
+                    groq_api_key=st.session_state.groq_api_key,
+                    groq_model=st.session_state.groq_aux_model,
+                )
         except Exception as e:
             st.error(f"Failed to initialize LLM client: {e}")
             st.session_state.running = False
             st.stop()
-        
-        # Create agent with selected LLM client
+
+        # Create agent with selected LLM client (+ optional aux judge client)
         agent = FinetuneAgent(
             seed=42,
             llm_client=llm_client,
+            aux_llm_client=aux_client,
             progress_callback=progress_callback,
         )
         

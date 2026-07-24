@@ -56,16 +56,23 @@ class FinetuneAgent:
         seed: int | None = None,
         llm_client=None,
         progress_callback: Callable[[str], None] | None = None,
+        aux_llm_client=None,
     ):
         """Initialize the agent.
-        
+
         Args:
             seed: Random seed for reproducibility
             llm_client: Optional LLM client (uses default if None)
             progress_callback: Optional callback for progress updates
+            aux_llm_client: Optional secondary client for the judging stages
+                (critic + evaluator). Lets a run generate with a strong model
+                while critiquing/scoring with a lighter or separate model —
+                which also spreads provider rate limits across two buckets.
+                Falls back to the primary client when not provided.
         """
         self._seed = seed
         self._llm = llm_client
+        self._aux_llm = aux_llm_client
         self._progress_callback = progress_callback or (lambda x: None)
         
         # Initialize components (lazy-loaded with LLM)
@@ -87,7 +94,15 @@ class FinetuneAgent:
             from distillery.llm import get_llm_client
             self._llm = get_llm_client()
         return self._llm
-    
+
+    @property
+    def aux_llm(self):
+        """Secondary client for judging/analysis (critic + evaluator).
+
+        Falls back to the primary client when no aux client was provided.
+        """
+        return self._aux_llm or self.llm
+
     @property
     def planner(self) -> Planner:
         """Get or create the planner."""
@@ -111,7 +126,7 @@ class FinetuneAgent:
         """Get or create the critic."""
         if self._critic is None:
             self._critic = DatasetCritic(
-                llm_client=self.llm,
+                llm_client=self.aux_llm,
                 aggressive=False,  # Default; overridden per-run
                 progress_callback=self._progress_callback,
             )
@@ -122,7 +137,7 @@ class FinetuneAgent:
         """Get or create the evaluator."""
         if self._evaluator is None:
             self._evaluator = Evaluator(
-                llm_client=self.llm,
+                llm_client=self.aux_llm,
                 progress_callback=self._progress_callback,
             )
         return self._evaluator
@@ -372,7 +387,7 @@ class FinetuneAgent:
         
         # Update critic with current constraints (including new DatasetConstraints)
         self._critic = DatasetCritic(
-            llm_client=self.llm,
+            llm_client=self.aux_llm,
             aggressive=constraints.aggressive_filtering,
             progress_callback=self._progress_callback,
             constraints=constraints.dataset_constraints,

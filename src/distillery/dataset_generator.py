@@ -489,15 +489,28 @@ Generate exactly {count} items. Make them production-quality."""
                     raise
 
                 delay = base_delay * (2 ** attempt)
-                # Honor Retry-After (seconds) if the provider sent one.
+                # Honor Retry-After (seconds) if the provider sent one — but CAP it.
+                # A provider that has hit a daily/large quota can send a very long
+                # Retry-After (minutes to hours); sleeping that out would hang the
+                # whole run. If it wants longer than the cap, fail fast instead so
+                # the caller can fall back or surface an honest error.
+                max_retry_after = 30.0
                 headers = getattr(response, "headers", None)
                 if headers is not None:
                     retry_after = headers.get("retry-after")
                     if retry_after:
                         try:
-                            delay = max(delay, float(retry_after))
+                            requested = float(retry_after)
                         except ValueError:
-                            pass
+                            requested = 0.0
+                        if requested > max_retry_after:
+                            self._report_progress(
+                                f"Provider asked to wait {requested:.0f}s (quota "
+                                "likely exhausted) — failing fast instead of hanging."
+                            )
+                            raise
+                        delay = max(delay, requested)
+                delay = min(delay, max_retry_after)
 
                 self._report_progress(
                     f"LLM call {'rate-limited (429)' if is_rate_limit else f'failed ({status})'}; "

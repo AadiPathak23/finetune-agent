@@ -2,9 +2,53 @@
 
 > Working log of changes made to this codebase, so a fresh session (human or AI)
 > can pick up without re-deriving context. Newest context at top.
-> Last updated: 2026-07-09.
+> Last updated: 2026-07-24.
 
-## ⭐ Current status (session close 2026-07-09)
+## ⭐ Current status (session close 2026-07-24)
+
+- **Where the code is:** `main` on GitHub (`AadiPathak23/distillery`). Repo rename from
+  `finetune-agent` → `distillery` is **done** (CI badge live). Full suite **136 passing**.
+- **This session shipped (all UI + backend, no pipeline-logic weakening):**
+  1. **Professional UI redesign** — restructured the Streamlit app into a sidebar control-panel +
+     main-canvas dashboard, a minimalist **lime-on-black** theme (flat, no glow), inline-SVG line
+     icons, and a marketed empty-state "pipeline" feature grid. (`ui/app.py`, `.streamlit/config.toml`)
+  2. **First-class Groq provider** in the dropdown with its own settings panel, **plus key-hiding**:
+     when `GROQ_API_KEY` is in the env, the UI shows a locked status and **never renders the key in a
+     field** (no reveal). Env keys are used silently at runtime via the client factory.
+  3. **Two-model split** — `FinetuneAgent(aux_llm_client=...)`: generation (Planner+Generator) uses the
+     primary model, **Critic + Evaluator use the aux model**; `aux_llm` falls back to primary. UI adds
+     a second **"Judge / analysis model"** picker (default `llama-3.1-8b-instant`). On Groq this puts
+     judging on a separate per-model rate-limit bucket.
+  4. **Retry-cap hang fix** (`dataset_generator._generate_json_with_retry`) — caps `Retry-After` at 30s
+     and **fails fast beyond it**. Root cause of a real 45-min "hang": Groq returned a huge
+     `Retry-After` on quota exhaustion and the old code slept it out (uncapped).
+  5. **Correctness-judge retry** (`evaluator.calculate_correctness_score`) — retries transient
+     failures (2s/4s) before the neutral 70.0 fallback.
+  - (Earlier, already pushed: **correctness truncation fix** `6a5dadb` — judge answer window
+    400→1500 chars, moved a real run's correctness 48.75 → 89.38.)
+- **Validation:** a reviewer subagent audited the four changed files (**no defects**); my smoke tests
+  passed (mock end-to-end + exports, two-model routing, the hang fix raising in 0.00s, and a **real
+  70B-gen / 8B-judge run completing in 56s** with a clean 2/2 verification). 136 tests pass.
+- **Showcase-run status (for the LinkedIn post):** the **verification banner works reliably** (e.g.
+  "executed 9/10, 9 passed, 1 rejected"). Two remaining rough spots are **Groq free-tier limits, NOT
+  code**:
+  - **Correctness score falls back to 70** when the judge call is throttled mid-run. The real score is
+    ~85 (proven in isolation: 8B judge returned 80/90/avg-85; 70B judge returned 89 earlier).
+  - **Generation quality degrades** (syntax_fail spikes → fewer survivors, e.g. 5/10) once the daily
+    free-tier budget is exhausted on a heavy testing day.
+  - **Fix = run on fresh quota** (Groq daily reset) or a paid tier / a second provider (Gemini free)
+    for the judge. The gate rejecting broken items is correct behavior, not a regression.
+- **Next steps:**
+  1. **Deployment** (owner is starting a *new session* for this) — Streamlit Community Cloud (Render/
+     Railway also fine). **Vercel is NOT suitable** (Streamlit needs a long-running server). See
+     `CLAUDE.md` for the handoff.
+  2. **Showcase run on fresh quota** → screenshots (empty-state dashboard + "Self-verified" banner +
+     evaluation panel) → embed in README (placeholder is in place).
+  3. **LinkedIn post** — draft copy is in the plan file from the 2026-07-22 session.
+- **Commit hygiene:** commits on this repo are authored **solely under the owner** — do **not** add a
+  `Co-Authored-By: Claude` trailer (public LinkedIn showcase).
+
+## Earlier status (session close 2026-07-09)
 
 - **Where the code is:** `main` @ `470c05a`, **pushed** to GitHub. Working tree clean.
   Full suite **136 passing**; `distillery` wheel builds cleanly (deploy-ready).

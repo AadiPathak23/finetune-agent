@@ -5,6 +5,7 @@ V2: Now includes LLM-assisted conceptual scoring and health metrics.
 
 import math
 import re
+import time
 from collections import Counter
 from typing import Callable
 
@@ -323,23 +324,34 @@ Return JSON:
   "dataset_avg": <0-100>
 }}"""
 
-        try:
-            response = self.llm.generate_json(prompt)
-            per_item: dict[int, float] = {}
-            for entry in response.get("items", []):
-                idx = entry.get("index")
-                score = entry.get("correctness_score")
-                if idx is not None and score is not None:
-                    per_item[int(idx)] = min(100.0, max(0.0, float(score)))
-            if per_item:
-                avg = sum(per_item.values()) / len(per_item)
-            else:
-                avg = min(100.0, max(0.0, float(response.get("dataset_avg", 70))))
-            return round(avg, 2), per_item
-        except Exception as e:
-            self._report_progress(f"LLM correctness judging failed: {e}")
-            # Conservative neutral fallback — never fabricate a high score.
-            return 70.0, {}
+        # Retry transient failures (e.g. a rate-limit 429) before falling back —
+        # otherwise a single hiccup silently pins the score to the neutral 70.
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                response = self.llm.generate_json(prompt)
+                per_item: dict[int, float] = {}
+                for entry in response.get("items", []):
+                    idx = entry.get("index")
+                    score = entry.get("correctness_score")
+                    if idx is not None and score is not None:
+                        per_item[int(idx)] = min(100.0, max(0.0, float(score)))
+                if per_item:
+                    avg = sum(per_item.values()) / len(per_item)
+                else:
+                    avg = min(100.0, max(0.0, float(response.get("dataset_avg", 70))))
+                return round(avg, 2), per_item
+            except Exception as e:  # noqa: PERF203
+                last_err = e
+                if attempt < 2:
+                    self._report_progress(
+                        f"Correctness judging hiccup ({e}); retrying "
+                        f"in {2 * (attempt + 1)}s..."
+                    )
+                    time.sleep(2 * (attempt + 1))
+        self._report_progress(f"LLM correctness judging failed: {last_err}")
+        # Conservative neutral fallback — never fabricate a high score.
+        return 70.0, {}
 
     # =========================================================================
     # Health Metrics
