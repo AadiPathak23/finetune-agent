@@ -4,6 +4,32 @@
 > can pick up without re-deriving context. Newest context at top.
 > Last updated: 2026-07-24.
 
+## ▶▶ RESUME HERE — next session (continuing 2026-07-25)
+
+**Where we left off (end of 2026-07-24):** the build and the repo are **DONE and pushed**
+(`main` @ `25f1ee2` on `AadiPathak23/distillery`). Everything is committed **under the owner's name,
+no Claude co-author**. 136 tests pass. The product works end to end; we're on the **last mile of the
+LinkedIn launch** — two visual assets + deployment remain.
+
+**Do these next, in order:**
+1. **DEPLOY** the Streamlit app → **Streamlit Community Cloud** (point it at
+   `src/distillery/ui/app.py`; it's bring-your-own-key). Render/Railway also fine. **NOT Vercel**
+   (Streamlit needs a long-running server + the gate spawns pytest subprocesses). Goal: a **live demo
+   URL** for the post.
+2. **Clean showcase run on FRESH Groq quota** — in the UI: provider **Groq**, Generation model
+   `llama-3.3-70b-versatile`, Judge model `llama-3.1-8b-instant`, dataset `testcase_generation`,
+   count ~12, **gate ON**, aggressive **OFF**. Target: 9–10/10 survivors, a clean "Self-verified"
+   banner, and a real correctness ~85. (It only falls back to 70 when the free tier throttles the
+   judge — that's a quota issue, not a bug. Real score proven ~85.)
+3. **Screenshots** from that run → embed in README where the `<!-- SCREENSHOTS -->` placeholder is:
+   empty-state dashboard + the "Self-verified" banner + the evaluation panel. Optional: a short run GIF.
+4. **Finalize + publish the LinkedIn post** — draft copy is in the plan file from the 2026-07-22
+   session; add the demo link + screenshots.
+
+**Standing rules:** no `Co-Authored-By: Claude` trailer on commits; never weaken the correctness gate;
+after editing backend files restart Streamlit fully (Windows: `taskkill //F //IM streamlit.exe`, then
+relaunch). More detail in `CLAUDE.md` and the session log below.
+
 ## ⭐ Current status (session close 2026-07-24)
 
 - **Where the code is:** `main` on GitHub (`AadiPathak23/distillery`). Repo rename from
